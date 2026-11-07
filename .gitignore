@@ -19,3 +19,8 @@
 
 __pycache__/
 *.pyc
+
+# 由 scripts/generate-feed-key.sh 生成的签名源密钥材料。
+/layers/meta-sixlinux/recipes-core/sixlinux-opkg-config/files/gpg-home/
+/layers/meta-sixlinux/recipes-core/sixlinux-opkg-config/files/sixlinux-feed.asc
+

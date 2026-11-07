@@ -7,6 +7,8 @@ DEPLOY_IPK="$BUILD_DIR/tmp/deploy/ipk"
 RECIPE_DIR="$ROOT_DIR/layers/meta-sixlinux/recipes-apps/sixlinux-hello"
 V1_CACHE="$ROOT_DIR/artifacts/feed-v1"
 INDEX_BIN="$BUILD_DIR/tmp/work/x86_64-linux/opkg-utils-native/0.6.3/git/opkg-make-index"
+KEY_HOME="$ROOT_DIR/artifacts/keys/gnupg-feed"
+KEY_ID_FILE="$ROOT_DIR/artifacts/keys/feed-key-id"
 
 if (( EUID == 0 )); then
     printf '错误：请使用 dev 用户构建软件仓库。\n' >&2
@@ -44,4 +46,20 @@ for feed in all cortexa53 sixlinux_qemuarm64; do
     (cd "$DEPLOY_IPK/$feed" && "$INDEX_BIN" -a -p Packages .)
 done
 
-printf '软件仓库已生成：%s\n' "$DEPLOY_IPK"
+# 用软件源签名密钥对每个 feed 的 Packages 生成 ASCII 装甲分离签名。
+# opkg 下载 Packages.gz 解压后，与 Packages.asc 一起验签。
+bash "$ROOT_DIR/scripts/generate-feed-key.sh"
+if [[ ! -d "$KEY_HOME" || ! -s "$KEY_ID_FILE" ]]; then
+    printf '错误：软件源签名密钥未就绪。\n' >&2
+    exit 1
+fi
+FINGERPRINT="$(cat "$KEY_ID_FILE")"
+for feed in all cortexa53 sixlinux_qemuarm64; do
+    printf '签名 feed 索引：%s\n' "$feed"
+    gpg --homedir "$KEY_HOME" --batch --yes --local-user "$FINGERPRINT" \
+        --detach-sign --armor \
+        --output "$DEPLOY_IPK/$feed/Packages.asc" \
+        "$DEPLOY_IPK/$feed/Packages"
+done
+
+printf '软件仓库已生成并签名：%s\n' "$DEPLOY_IPK"

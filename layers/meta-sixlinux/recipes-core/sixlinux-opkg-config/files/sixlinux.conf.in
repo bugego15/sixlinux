@@ -1,0 +1,7 @@
+src/gz sixlinux-all @SIXLINUX_FEED_BASE@/all
+src/gz sixlinux-cortexa53 @SIXLINUX_FEED_BASE@/cortexa53
+src/gz sixlinux-machine @SIXLINUX_FEED_BASE@/sixlinux_qemuarm64
+
+# 只接受 GPG 签名正确的软件源索引（ASCII 装甲分离签名 Packages.asc）。
+option signature_type gpg-asc
+option check_signature 1

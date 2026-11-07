@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo run run-direct boot-test boot-test-direct driver-test board-test opkg-test release release-test ci
+.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo publish-feed run run-direct boot-test boot-test-direct driver-test board-test opkg-test release release-test ci
 
 help:
 	@printf '%s\n' \
@@ -11,7 +11,8 @@ help:
 	  '  make fetch-poky       Fetch pinned Poky, kernel and firmware repositories' \
 	  '  make build            Build the minimal SixLinux AArch64 image' \
 	  '  make firmware         Build TF-A, U-Boot and the QEMU device tree' \
-	  '  make package-repo     Build hello 1.0/1.1 and the opkg feed' \
+	  '  make package-repo     Build hello 1.0/1.1 and sign the opkg feed' \
+  '  make publish-feed     Copy the signed feed to a publishable directory' \
 	  '  make run              Boot through TF-A and U-Boot interactively' \
 	  '  make run-direct       Boot directly with a kernel and rootfs' \
 	  '  make boot-test        Verify the TF-A/U-Boot/Linux boot chain' \
@@ -43,6 +44,9 @@ firmware:
 package-repo:
 	@bash scripts/build-package-repo.sh
 
+publish-feed:
+	@bash scripts/publish-feed.sh
+
 run:
 	@bash scripts/run-firmware.sh
 
@@ -61,7 +65,7 @@ driver-test:
 board-test:
 	@python3 tests/board-suite.py
 
-opkg-test:
+opkg-test: package-repo
 	@python3 tests/opkg-repo.py
 
 release:

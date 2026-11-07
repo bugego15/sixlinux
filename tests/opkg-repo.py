@@ -80,6 +80,13 @@ def main() -> int:
         update_output = command_output(child, "opkg update", timeout=120)
         require_output(update_output, "sixlinux-cortexa53", "opkg 源更新")
 
+        feed_config = command_output(child, "cat /etc/opkg/sixlinux.conf")
+        require_output(feed_config, "option check_signature 1", "强制验签配置")
+        require_output(feed_config, "option signature_type gpg-asc", "签名类型配置")
+
+        keyring = command_output(child, "ls /etc/opkg/gpg")
+        require_output(keyring, "pubring.kbx", "公钥 keyring")
+
         package_list = command_output(child, "opkg list sixlinux-hello")
         require_output(package_list, "1.1-r0", "1.1 软件包索引")
 
@@ -89,9 +96,26 @@ def main() -> int:
         command_output(child, "opkg upgrade sixlinux-hello", timeout=120)
         require_output(command_output(child, "sixlinux-hello"), "SixLinux hello v1.1", "1.1 升级")
 
+        # 篡改 cortexa53 的签名，确认 opkg 强制验签生效。
+        signature = FEED_DIR / "cortexa53" / "Packages.asc"
+        signature_backup = signature.read_bytes()
+        try:
+            signature.write_text("invalid-signature\n", encoding="utf-8")
+            command_output(child, "rm -rf /var/lib/opkg/lists/*")
+            broken_output = command_output(child, "opkg update", timeout=120)
+            require_output(broken_output, "Signature verification failed",
+                           "篡改签名后 opkg update 拒绝")
+        finally:
+            signature.write_bytes(signature_backup)
+
+        # 恢复签名后源应重新可用。
+        command_output(child, "rm -rf /var/lib/opkg/lists/*")
+        restored_output = command_output(child, "opkg update", timeout=120)
+        require_output(restored_output, "sixlinux-cortexa53", "恢复签名后的源更新")
+
         child.sendline("poweroff")
         child.expect(pexpect.EOF, timeout=90)
-        print("opkg HTTP 软件仓库、1.0 安装及 1.1 升级验证通过。")
+        print("opkg 签名源验证通过：签名配置生效、1.0 安装、1.1 升级、篡改签名被拒绝。")
         print(f"测试日志：{LOG_PATH}")
         return 0
     except Exception as exc:

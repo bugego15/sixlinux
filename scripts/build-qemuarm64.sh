@@ -14,6 +14,8 @@ fi
 
 # 密码登录被禁用，构建前必须准备好 release 登录密钥和 SSH 主机密钥。
 bash "$ROOT_DIR/scripts/generate-keys.sh"
+# 软件源 GPG 签名密钥和镜像内 keyring。
+bash "$ROOT_DIR/scripts/generate-feed-key.sh"
 
 if [[ ! -f "$POKY_DIR/oe-init-build-env" ]]; then
     printf '错误：Poky 尚未下载到 %s。\n' "$POKY_DIR" >&2

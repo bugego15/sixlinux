@@ -15,7 +15,7 @@ required_commands=(
     aarch64-linux-gnu-gcc aarch64-linux-gnu-g++
     dtc fdtput chrpath socat cpio zstd lz4
     bison flex openssl expect parted
-    ssh ssh-keygen sha256sum
+    ssh ssh-keygen sha256sum gpg gpgv
 )
 missing=()
 
