@@ -1,0 +1,29 @@
+CONF_VERSION = "2"
+
+MACHINE = "sixlinux-qemuarm64"
+DISTRO = "sixlinux"
+PACKAGE_CLASSES = "package_ipk"
+
+DL_DIR = "${TOPDIR}/../../cache/downloads"
+SSTATE_DIR = "${TOPDIR}/../../cache/sstate-cache"
+TMPDIR = "${TOPDIR}/tmp"
+
+BB_NUMBER_THREADS = "8"
+PARALLEL_MAKE = "-j8"
+
+PREMIRRORS = " \
+    git://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    gitsm://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    https?://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    ftp://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    "
+
+BB_GIT_SHALLOW:pn-linux-yocto = "1"
+PREMIRRORS:pn-linux-yocto = ""
+
+# 仅用于本地 QEMU 开发：允许无密码 root 登录。发布镜像前必须移除。
+EXTRA_IMAGE_FEATURES = "debug-tweaks"
+
+IMAGE_FSTYPES = "tar.bz2 ext4"
+
+INHERIT += "buildstats"

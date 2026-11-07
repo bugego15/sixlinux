@@ -1,26 +1,11 @@
 # 项目 Layers
 
-后续自定义 Yocto layer 将放在 `layers/` 下。
+`meta-sixlinux` 是本阶段建立的最小 Yocto layer，当前包含：
 
-计划结构：
+- `conf/layer.conf`：layer 注册和 Scarthgap 兼容声明；
+- `conf/distro/sixlinux.conf`：无桌面、systemd 的发行版配置；
+- `conf/machine/sixlinux-qemuarm64.conf`：Cortex-A53、GICv3、2 vCPU、2 GB QEMU 配置；
+- `conf/templates/qemuarm64/`：可复现的构建目录模板；
+- `recipes-core/images/sixlinux-image-minimal.bb`：带 OpenSSH 的最小镜像。
 
-```text
-layers/meta-sixlinux/
-├── conf/
-│   ├── layer.conf
-│   ├── distro/
-│   ├── machine/
-│   └── templates/
-├── recipes-core/
-│   ├── images/
-│   ├── opkg-config/
-│   └── sixlinux-security/
-├── recipes-bsp/
-│   └── u-boot/
-├── recipes-kernel/
-│   └── sixlinux-rtc-driver/
-└── recipes-apps/
-    └── sixlinux-hello/
-```
-
-本阶段只记录目录约定，不创建镜像、驱动或软件包 recipe。
+后续阶段再逐步加入 TF-A/U-Boot、RTC 驱动、opkg 配置和安全 release 配置。

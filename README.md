@@ -4,9 +4,11 @@
 
 ## 当前阶段
 
-**阶段 1：开发环境和项目骨架。**
+**阶段 1（P1）：Poky 最小 AArch64 镜像。**
 
-本阶段只建立开发环境检查、目录约定和后续实施路线，尚未开始生成 Linux 镜像。
+本阶段建立固定版本的 Poky 构建环境、自定义 layer、machine、distro 和最小 image，并用直接内核启动方式验证系统。
+
+后续阶段再加入 TF-A/U-Boot、驱动、软件仓库和 release 安全登录。
 
 ## 开发环境
 
@@ -23,7 +25,7 @@ Windows
 - 不在 `/mnt/e` 下执行 Yocto 大型构建；
 - 不使用 root 运行 BitBake。
 
-## 环境检查
+## 构建和验证
 
 ```powershell
 wsl -d Ubuntu-24.04
@@ -32,19 +34,19 @@ wsl -d Ubuntu-24.04
 ```bash
 cd /home/dev/sixlinux
 make check-env
+make fetch-poky
+make build
+make boot-test-direct
 ```
 
-检查内容包括：非 root 用户、编译和仿真工具、AArch64 工具链、QEMU Cortex-A53、UTF-8 locale 和 WSL 原生文件系统。
+`boot-test-direct` 会启动实际镜像，检查 AArch64、2 个 vCPU、SixLinux 标识和 systemd 状态，并正常关机。
 
-## 后续路线
+## 当前文件
 
-1. 环境和项目骨架；
-2. Poky 最小 AArch64 镜像；
-3. TF-A + U-Boot 启动链；
-4. U-Boot 自动启动；
-5. RTC platform driver；
-6. opkg 软件仓库和版本升级；
-7. release 安全登录和发布产物；
-8. CI 与文档完善。
+- `sources/versions.env`：固定 Poky 和 Linux 版本；
+- `layers/meta-sixlinux/conf/`：layer、machine、distro 和构建模板；
+- `layers/meta-sixlinux/recipes-core/images/`：最小镜像 recipe；
+- `scripts/`：源码获取、构建和直接启动脚本；
+- `tests/boot-qemuarm64.py`：直接启动自动验证。
 
-每个阶段都执行“修改、构建、验证、提交”，详细路线见 `docs/roadmap.md`。
+详细路线见 `docs/roadmap.md`。
