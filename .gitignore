@@ -1,0 +1,17 @@
+/build/
+/cache/
+/artifacts/
+/sources/poky/
+/sources/arm-trusted-firmware/
+/layers/meta-sixlinux/recipes-core/sixlinux-security/files/ssh_host_ed25519_key
+
+*.img
+*.wic
+*.wic.bmap
+*.ext4
+*.qcow2
+*.vhdx
+*.log
+
+__pycache__/
+*.pyc
