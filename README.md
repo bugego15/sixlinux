@@ -9,7 +9,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 - TF-A BL1/BL2/BL31 + U-Boot BL33 的完整固件启动链，`secure=on`、GICv3、PSCI 走 SMC；
 - 零输入自动启动：`CONFIG_BOOTCOMMAND` 固化 `setenv bootargs` + `booti`；
 - PL031 RTC platform driver：设备树绑定、MMIO、IRQ、debugfs，并注册标准 `/dev/rtc0`；
-- 板级验证套件：在目标系统内运行 CPU、SMP、内存、中断、RTC、块设备、网络和 systemd 共 8 项检查；
+- 板级验证套件：固件启动 12 项检查（含内核状态、cgroup、namespace、seccomp）+ 直接启动 GPIO 验证；
 - opkg 在线软件仓库：hello 1.0/1.1 安装与升级；
 - 自有签名软件源：GPG 签名的 opkg feed，源地址可通过 `SIXLINUX_FEED_BASE` 指向本机、局域网或公网 HTTPS；
 - release 安全登录：无 debug-tweaks、root/密码禁用、dev 用户 ed25519 公钥 + sudo；
@@ -29,6 +29,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 | P7 | 本地 CI、GitHub Actions 与文档 | `951dbcc`、`d9b40b5`、`115a5ed`、`31ae6a0`、`24a9dad` |
 | P8 | 板级验证套件与标准 rtc0 设备 | `eb7aba7`、`a78aac6`、`dc1f43b` |
 | P9 | 自有 GPG 签名软件源 | `f666e6d`、`a2ce75f` |
+| P10 | 板级测试与内核验证扩展 | 本阶段提交 |
 
 每个阶段都有对应的验证记录：`docs/p*-validation.md`。
 
@@ -71,7 +72,8 @@ make fetch-poky
 make build          # 自动生成 SSH 密钥和软件源签名密钥并构建镜像
 make firmware       # 构建 TF-A、U-Boot 和修正后的 DTB
 make boot-test      # 零输入验证完整启动链
-make board-test     # 在目标系统里运行 8 项板级验证
+make board-test     # 固件启动模式：12 项板级/内核验证
+make gpio-test      # 直接启动模式：PL061 GPIO 验证
 make package-repo   # 生成签名 opkg feed（Packages + Packages.asc）
 ```
 
@@ -96,7 +98,8 @@ make ci
 | `make run-direct` | 直接内核启动（调试回退路径） |
 | `make boot-test` | 自动验证 TF-A → U-Boot → Linux |
 | `make driver-test` | 验证 RTC MMIO/IRQ/debugfs 和 `/dev/rtc0` |
-| `make board-test` | 在目标系统里运行 CPU/SMP/内存/中断/RTC/块设备/网络/systemd 检查 |
+| `make board-test` | 固件启动模式运行内核/cgroup/namespace/seccomp 等 12 项检查 |
+| `make gpio-test` | 直接启动模式验证 PL061 GPIO 子系统 |
 | `make opkg-test` | 验证 opkg 安装和升级 |
 | `make release` | 构建并打包 release 镜像 |
 | `make release-test` | 验证 release SSH 安全策略 |
@@ -135,7 +138,7 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - `docs/release.md`：release 构建与安全配置；
 - `docs/bring-up-notes.md`：构建和调试故障排查记录；
 - `docs/roadmap.md`：分阶段复现路线；
-- `docs/p1-validation.md` … `docs/p9-validation.md`：各阶段验证记录。
+- `docs/p1-validation.md` … `docs/p10-validation.md`：各阶段验证记录。
 
 ## 安全说明
 
@@ -151,3 +154,4 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - `.github/workflows/ci.yml`：GitHub Actions 在 Ubuntu 24.04 上安装 Yocto 依赖，缓存 `cache/downloads` 和 `cache/sstate-cache`，执行 `./scripts/ci.sh` 并上传发布产物。
 
 首次 CI 构建耗时较长，后续可复用缓存加速。
+

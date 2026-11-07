@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo publish-feed run run-direct boot-test boot-test-direct driver-test board-test opkg-test release release-test ci
+.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo publish-feed run run-direct boot-test boot-test-direct driver-test board-test gpio-test opkg-test release release-test ci
 
 help:
 	@printf '%s\n' \
@@ -12,13 +12,14 @@ help:
 	  '  make build            Build the minimal SixLinux AArch64 image' \
 	  '  make firmware         Build TF-A, U-Boot and the QEMU device tree' \
 	  '  make package-repo     Build hello 1.0/1.1 and sign the opkg feed' \
-  '  make publish-feed     Copy the signed feed to a publishable directory' \
+	  '  make publish-feed     Copy the signed feed to a publishable directory' \
 	  '  make run              Boot through TF-A and U-Boot interactively' \
 	  '  make run-direct       Boot directly with a kernel and rootfs' \
 	  '  make boot-test        Verify the TF-A/U-Boot/Linux boot chain' \
 	  '  make boot-test-direct Verify direct kernel boot' \
 	  '  make driver-test      Verify RTC MMIO, IRQ and debugfs' \
 	  '  make board-test       Run the on-target board validation suite' \
+	  '  make gpio-test        Verify PL061 GPIO in direct-boot mode' \
 	  '  make opkg-test        Verify opkg install and upgrade over HTTP' \
 	  '  make release          Build and package the secure release image' \
 	  '  make release-test     Verify release SSH security and poweroff' \
@@ -65,6 +66,9 @@ driver-test:
 board-test:
 	@python3 tests/board-suite.py
 
+gpio-test:
+	@python3 tests/gpio-test.py
+
 opkg-test: package-repo
 	@python3 tests/opkg-repo.py
 
@@ -76,3 +80,4 @@ release-test:
 
 ci:
 	@bash scripts/ci.sh
+

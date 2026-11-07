@@ -3,16 +3,21 @@
  * SixLinux board bring-up validation suite.
  *
  * 在目标发行版内部运行，按子命令逐项检查 CPU、SMP、内存、中断、RTC、
- * 块设备、网络和 systemd 是否按预期工作。
- */
+ * 块设备、网络、systemd、内核、cgroup、namespace、seccomp 和 GPIO。 */
 
 #define _GNU_SOURCE
 
 #include <arpa/inet.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <linux/filter.h>
 #include <linux/futex.h>
+#include <linux/gpio.h>
 #include <linux/rtc.h>
+#include <linux/seccomp.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -21,18 +26,22 @@
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/mount.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -999,6 +1008,439 @@ static int test_systemd(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* kernel                                                             */
+/* ------------------------------------------------------------------ */
+
+static int scan_output(const char *command, const char *const *patterns,
+                       int count, char *first_hit, size_t hitlen)
+{
+    FILE *pipe = popen(command, "r");
+    char line[512];
+    int hits = 0;
+
+    if (!pipe)
+        return -1;
+    while (fgets(line, sizeof(line), pipe)) {
+        int i;
+
+        for (i = 0; i < count; i++) {
+            if (strstr(line, patterns[i])) {
+                if (hits == 0 && first_hit) {
+                    size_t n = strlen(line);
+
+                    if (n > hitlen - 1)
+                        n = hitlen - 1;
+                    memcpy(first_hit, line, n);
+                    first_hit[n] = '\0';
+                }
+                hits++;
+            }
+        }
+    }
+    pclose(pipe);
+    return hits;
+}
+
+static int test_kernel(void)
+{
+    static const char *const bad_patterns[] = {
+        "BUG:", "Oops:", "Call trace:", "Kernel panic",
+        "Unable to handle kernel",
+    };
+    static const char *const required_configs[] = {
+        "CONFIG_CGROUPS=y",
+        "CONFIG_MEMCG=y",
+        "CONFIG_SECCOMP_FILTER=y",
+        "CONFIG_NAMESPACES=y",
+        "CONFIG_GPIO_CDEV=y",
+        "CONFIG_GPIO_PL061=y",
+        "CONFIG_RTC_DRV_PL031=y",
+        "CONFIG_IKCONFIG_PROC=y",
+    };
+    char first_hit[256] = "";
+    char buf[256];
+    struct utsname uts;
+    int hits;
+    size_t i;
+
+    uname(&uts);
+    check("version", uts.release[0] != '\0', "kernel=%s", uts.release);
+
+    if (read_first_line("/proc/cmdline", buf, sizeof(buf)) == 0)
+        check("cmdline", true, "%.120s", buf);
+    else
+        check("cmdline", false, "无法读取 /proc/cmdline");
+
+    hits = scan_output("dmesg 2>/dev/null", bad_patterns,
+                       (int)(sizeof(bad_patterns) / sizeof(bad_patterns[0])),
+                       first_hit, sizeof(first_hit));
+    if (hits < 0) {
+        check("dmesg", false, "无法执行 dmesg");
+    } else {
+        if (hits > 0)
+            first_hit[strcspn(first_hit, "\n")] = '\0';
+        check("dmesg", hits == 0, "异常行=%d %s", hits, first_hit);
+    }
+
+    if (read_first_line("/proc/sys/kernel/tainted", buf, sizeof(buf)) == 0)
+        info("taint", "tainted=%s", buf);
+
+    for (i = 0; i < sizeof(required_configs) / sizeof(required_configs[0]); i++) {
+        char command[160];
+        int found;
+
+        snprintf(command, sizeof(command),
+                 "zcat /proc/config.gz 2>/dev/null | grep -q '^%s$'",
+                 required_configs[i]);
+        found = system(command) == 0;
+        check("config", found, "%s", required_configs[i]);
+    }
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* cgroup                                                             */
+/* ------------------------------------------------------------------ */
+
+#define CGROUP_ROOT "/sys/fs/cgroup"
+#define CGROUP_TEST CGROUP_ROOT "/sixlinux-boardtest"
+
+static int cgroup_write(const char *path, const char *value)
+{
+    int fd = open(path, O_WRONLY);
+    ssize_t written;
+
+    if (fd < 0)
+        return -1;
+    written = write(fd, value, strlen(value));
+    close(fd);
+    return written == (ssize_t)strlen(value) ? 0 : -1;
+}
+
+static long long cgroup_event(const char *path, const char *key)
+{
+    FILE *f = fopen(path, "r");
+    char line[128];
+    long long value = -1;
+    size_t keylen = strlen(key);
+
+    if (!f)
+        return -1;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, key, keylen) == 0 && line[keylen] == ' ') {
+            value = strtoll(line + keylen + 1, NULL, 10);
+            break;
+        }
+    }
+    fclose(f);
+    return value;
+}
+
+static int test_cgroup(void)
+{
+    char controllers[256] = "";
+    int pid, status;
+    long long oom_before, oom_after;
+
+    check("v2", access(CGROUP_ROOT "/cgroup.controllers", F_OK) == 0,
+          "cgroup v2 统一层级");
+    if (read_first_line(CGROUP_ROOT "/cgroup.controllers", controllers,
+                        sizeof(controllers)) == 0) {
+        check("memory", strstr(controllers, "memory") != NULL,
+              "controllers=%.100s", controllers);
+        check("pids", strstr(controllers, "pids") != NULL,
+              "pids 控制器可用");
+    } else {
+        check("memory", false, "无法读取 cgroup.controllers");
+        check("pids", false, "无法读取 cgroup.controllers");
+    }
+
+    /* 尽力在根子树启用 memory/pids 控制器，失败时继续尝试使用现有配置。 */
+    cgroup_write(CGROUP_ROOT "/cgroup.subtree_control", "+memory +pids");
+
+    rmdir(CGROUP_TEST);
+    if (mkdir(CGROUP_TEST, 0755) != 0) {
+        check("create", false, "mkdir %s: %s", CGROUP_TEST, strerror(errno));
+        return 0;
+    }
+    check("create", true, "%s", CGROUP_TEST);
+
+    oom_before = cgroup_event(CGROUP_TEST "/memory.events", "oom_kill");
+    check("memory.max",
+          cgroup_write(CGROUP_TEST "/memory.max", "33554432") == 0,
+          "memory.max=32M");
+
+    pid = fork();
+    if (pid == 0) {
+        char pidbuf[32];
+        volatile char *mem;
+        size_t i;
+        int fd;
+
+        snprintf(pidbuf, sizeof(pidbuf), "%d", (int)getpid());
+        fd = open(CGROUP_TEST "/cgroup.procs", O_WRONLY);
+        if (fd >= 0) {
+            ssize_t ignored = write(fd, pidbuf, strlen(pidbuf));
+
+            (void)ignored;
+            close(fd);
+        }
+        mem = malloc(256 * MEM_BLOCK);
+        if (!mem)
+            _exit(2);
+        for (i = 0; i < 256 * MEM_BLOCK; i += 4096)
+            mem[i] = (char)i;
+        _exit(0);
+    }
+    if (pid < 0) {
+        check("oom", false, "fork 失败：%s", strerror(errno));
+    } else {
+        waitpid(pid, &status, 0);
+        usleep(200 * 1000);
+        oom_after = cgroup_event(CGROUP_TEST "/memory.events", "oom_kill");
+        check("oom", oom_after > 0 && oom_after > oom_before,
+              "子进程被 OOM 杀死=%d oom_kill=%lld", WIFSIGNALED(status),
+              oom_after);
+    }
+
+    check("pids.max", cgroup_write(CGROUP_TEST "/pids.max", "64") == 0,
+          "pids.max=64");
+    rmdir(CGROUP_TEST);
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* namespaces                                                         */
+/* ------------------------------------------------------------------ */
+
+static int ns_child_pid_probe(void)
+{
+    int pipefd[2];
+    pid_t pid;
+
+    if (pipe(pipefd) != 0)
+        return -1;
+    pid = fork();
+    if (pid == 0) {
+        char buf[32];
+
+        close(pipefd[0]);
+        snprintf(buf, sizeof(buf), "%d", (int)getpid());
+        {
+            ssize_t ignored = write(pipefd[1], buf, strlen(buf));
+
+            (void)ignored;
+        }
+        close(pipefd[1]);
+        _exit(0);
+    }
+    close(pipefd[1]);
+    {
+        char buf[32] = "";
+        ssize_t n = read(pipefd[0], buf, sizeof(buf) - 1);
+
+        close(pipefd[0]);
+        waitpid(pid, NULL, 0);
+        if (n > 0)
+            return atoi(buf);
+    }
+    return -1;
+}
+
+static int iface_names(char names[][IFNAMSIZ], int max)
+{
+    struct ifaddrs *head = NULL;
+    struct ifaddrs *cur;
+    int count = 0;
+    int i;
+
+    if (getifaddrs(&head) != 0)
+        return -1;
+    for (cur = head; cur; cur = cur->ifa_next) {
+        bool seen = false;
+
+        for (i = 0; i < count; i++) {
+            if (strcmp(names[i], cur->ifa_name) == 0) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen && count < max)
+            snprintf(names[count++], IFNAMSIZ, "%s", cur->ifa_name);
+    }
+    freeifaddrs(head);
+    return count;
+}
+
+static int test_ns(void)
+{
+    char host_before[128] = "";
+    char host_after[128] = "";
+    char host_ifaces[16][IFNAMSIZ];
+    char ns_ifaces[16][IFNAMSIZ];
+    int host_count;
+    int ns_count;
+    int i, j;
+    bool leaked = false;
+
+    memset(host_ifaces, 0, sizeof(host_ifaces));
+    memset(ns_ifaces, 0, sizeof(ns_ifaces));
+    host_count = iface_names(host_ifaces, 16);
+
+    gethostname(host_before, sizeof(host_before));
+
+    if (unshare(CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNET | CLONE_NEWNS |
+                CLONE_NEWPID) != 0) {
+        check("unshare", false, "unshare 失败：%s", strerror(errno));
+        return 0;
+    }
+    check("unshare", true, "UTS/IPC/NET/MOUNT/PID");
+
+    /* 把挂载传播设为 private，避免测试挂载泄漏到原 mount namespace。 */
+    mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL);
+
+    check("sethostname", sethostname("sixlinux-ns", strlen("sixlinux-ns")) == 0, "设置主机名");
+    gethostname(host_after, sizeof(host_after));
+    check("uts", strcmp(host_before, host_after) != 0, "hostname=%s",
+          host_after);
+
+    mkdir("/run/sixlinux-ns", 0755);
+    if (mount("tmpfs", "/run/sixlinux-ns", "tmpfs", 0, "size=1m") == 0) {
+        check("mount", true, "tmpfs 挂载成功");
+        write_file("/run/sixlinux-ns/probe", "ns\n");
+        check("mount-rw", access("/run/sixlinux-ns/probe", F_OK) == 0,
+              "tmpfs 可写");
+        umount("/run/sixlinux-ns");
+    } else {
+        check("mount", false, "mount tmpfs 失败：%s", strerror(errno));
+    }
+    rmdir("/run/sixlinux-ns");
+
+    ns_count = iface_names(ns_ifaces, 16);
+    for (i = 0; i < ns_count; i++) {
+        for (j = 0; j < host_count; j++) {
+            if (strcmp(ns_ifaces[i], host_ifaces[j]) == 0 &&
+                strcmp(ns_ifaces[i], "lo") != 0 &&
+                strcmp(ns_ifaces[i], "sit0") != 0)
+                leaked = true;
+        }
+    }
+    check("net", ns_count >= 1 && !leaked,
+          "host 接口=%d 新 netns 接口=%d 泄漏=%d", host_count, ns_count,
+          leaked);
+
+    {
+        int pid = ns_child_pid_probe();
+
+        check("pid", pid == 1, "子进程在新 PID namespace 中 pid=%d", pid);
+    }
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* seccomp                                                            */
+/* ------------------------------------------------------------------ */
+
+static int test_seccomp(void)
+{
+    struct sock_filter filter[] = {
+        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_getppid, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K,
+                 SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+    };
+    struct sock_fprog prog = {
+        .len = (unsigned short)(sizeof(filter) / sizeof(filter[0])),
+        .filter = filter,
+    };
+    bool mode = false;
+    FILE *f;
+    char line[256];
+
+    check("no-new-privs", prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0,
+          "PR_SET_NO_NEW_PRIVS");
+    check("filter", prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) == 0,
+          "安装 seccomp BPF 过滤器");
+
+    errno = 0;
+    {
+        long raw = syscall(SYS_getppid);
+
+        check("blocked", raw == -1 && errno == EPERM,
+              "getppid 被拒绝（返回=%ld errno=%d）", raw, errno);
+    }
+    check("allowed", getpid() > 0, "getpid 仍然可用");
+
+    f = fopen("/proc/self/status", "r");
+    if (f) {
+        while (fgets(line, sizeof(line), f)) {
+            if (strncmp(line, "Seccomp:", 8) == 0 && strstr(line, "2"))
+                mode = true;
+        }
+        fclose(f);
+    }
+    check("mode", mode, "Seccomp 模式为 filter(2)");
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* gpio（仅直接启动 secure=off 时可用）                                */
+/* ------------------------------------------------------------------ */
+
+static int test_gpio(void)
+{
+    struct gpiochip_info info;
+    char line[256];
+    int fd;
+
+    fd = open("/dev/gpiochip0", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        check("chip", false, "open /dev/gpiochip0 失败：%s", strerror(errno));
+        return 0;
+    }
+
+    memset(&info, 0, sizeof(info));
+    if (ioctl(fd, GPIO_GET_CHIPINFO_IOCTL, &info) != 0) {
+        check("info", false, "GPIO_GET_CHIPINFO_IOCTL 失败：%s",
+              strerror(errno));
+        close(fd);
+        return 0;
+    }
+    check("chip", true, "name=%s label=%s lines=%u", info.name, info.label,
+          info.lines);
+    check("lines", info.lines > 0, "GPIO 线数=%u", info.lines);
+    close(fd);
+
+    mkdir("/sys/kernel/debug", 0755);
+    mount("debugfs", "/sys/kernel/debug", "debugfs", 0, NULL);
+    {
+        FILE *f = fopen("/sys/kernel/debug/gpio", "r");
+        int count = 0;
+        bool pl061 = false;
+
+        if (f) {
+            while (fgets(line, sizeof(line), f)) {
+                if (strstr(line, "gpio")) {
+                    count++;
+                    if (strstr(line, "pl061") || strstr(line, "PL061"))
+                        pl061 = true;
+                }
+            }
+            fclose(f);
+        }
+        check("debugfs", count > 0, "debugfs gpio 行数=%d pl061=%d", count,
+              pl061);
+    }
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -1008,10 +1450,13 @@ struct suite_entry {
 };
 
 static const struct suite_entry suite[] = {
-    { "cpu", test_cpu },       { "smp", test_smp },
-    { "mm", test_mm },         { "irq", test_irq },
-    { "rtc", test_rtc },       { "blk", test_blk },
-    { "net", test_net },       { "systemd", test_systemd },
+    { "kernel", test_kernel },   { "cpu", test_cpu },
+    { "smp", test_smp },         { "mm", test_mm },
+    { "irq", test_irq },         { "rtc", test_rtc },
+    { "blk", test_blk },         { "net", test_net },
+    { "cgroup", test_cgroup },   { "seccomp", test_seccomp },
+    { "systemd", test_systemd }, { "ns", test_ns },
+    { "gpio", test_gpio },
 };
 
 static int run_entry(const struct suite_entry *entry)
@@ -1052,3 +1497,4 @@ int main(int argc, char **argv)
         rc |= run_entry(&suite[i]);
     return rc;
 }
+

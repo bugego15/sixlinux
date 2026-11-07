@@ -132,6 +132,11 @@ def main() -> int:
                 f"{listing.stdout}{listing.stderr}"
             )
         tests = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+        # secure=on 固件启动下 PL061 被禁用，GPIO 测试改由 make gpio-test 在直接启动模式验证。
+        skipped = [name for name in tests if name == "gpio"]
+        tests = [name for name in tests if name != "gpio"]
+        if skipped:
+            print(f"跳过 {', '.join(skipped)}（GPIO 走直接启动的 make gpio-test）")
         if not tests:
             raise RuntimeError("测试列表为空")
 

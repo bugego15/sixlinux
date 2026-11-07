@@ -59,3 +59,11 @@
 - 提供 `make publish-feed` 发布签名 feed；
 - 执行 `make opkg-test` 和完整 `make ci`。
 
+## 阶段 10：板级测试与内核验证扩展
+
+- 内核配置片段启用 `CONFIG_GPIO_PL061`；
+- `sixlinux-boardtest` 新增 `kernel`、`cgroup`、`ns`、`seccomp`、`gpio` 子命令；
+- 固件启动模式覆盖 12 项检查，新增直接启动模式的 `make gpio-test`；
+- 执行 `make board-test`、`make gpio-test` 和完整 `make ci`。
+
+
