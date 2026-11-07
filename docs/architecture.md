@@ -40,6 +40,20 @@ QEMU virt → Linux Image + ext4 rootfs → systemd
 
 使用 `make run-direct` 和 `make boot-test-direct`，便于隔离固件链与内核/rootfs 问题。
 
+## A/B OTA 启动链
+
+```text
+QEMU virt（A/B 磁盘：FAT 启动分区 + rootfs A/B）
+  → TF-A → U-Boot（尝试加载 virtio 0:1 的 boot.scr）
+  → boot.scr 读取 state.env（slot/prev/pending/bootcount）
+  → 超过试启动次数则回滚 slot=prev
+  → 从 FAT 分区加载 Image + virt.dtb
+  → root=/dev/vda2（slot A）或 /dev/vda3（slot B）
+  → userspace 确认试启动（pending=0）
+```
+
+普通镜像没有 FAT 启动分区，U-Boot 尝试加载 `boot.scr` 失败后回退到默认启动方式，两条路径共用同一份 U-Boot。
+
 ## 已验证设备与功能
 
 - PL011 串口 `ttyAMA0` 和 earlycon；
@@ -50,7 +64,8 @@ QEMU virt → Linux Image + ext4 rootfs → systemd
 - 标准 RTC 设备 `/dev/rtc0`（项目 PL031 platform driver 注册）；
 - systemd `running`；
 - PSCI 正常关机；
-- 板级验证套件覆盖 CPU/SMP/内存/中断/RTC/块设备/网络/systemd 共 8 项。
+- 板级验证套件覆盖 CPU/SMP/内存/中断/RTC/块设备/网络/systemd 以及内核状态、cgroup、namespace、seccomp 共 12 项，另有直接启动模式的 GPIO 验证；
+- A/B OTA：签名升级包、试启动确认、连续失败自动回滚。
 
 ## 边界
 

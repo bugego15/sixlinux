@@ -12,6 +12,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 - 板级验证套件：固件启动 12 项检查（含内核状态、cgroup、namespace、seccomp）+ 直接启动 GPIO 验证；
 - opkg 在线软件仓库：hello 1.0/1.1 安装与升级；
 - 自有签名软件源：GPG 签名的 opkg feed，源地址可通过 `SIXLINUX_FEED_BASE` 指向本机、局域网或公网 HTTPS；
+- A/B OTA 升级：双 rootfs 槽、U-Boot 选槽、签名升级包、试启动确认和失败自动回滚；
 - release 安全登录：无 debug-tweaks、root/密码禁用、dev 用户 ed25519 公钥 + sudo；
 - 本地 CI 和 GitHub Actions 流水线。
 
@@ -30,6 +31,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 | P8 | 板级验证套件与标准 rtc0 设备 | `eb7aba7`、`a78aac6`、`dc1f43b` |
 | P9 | 自有 GPG 签名软件源 | `f666e6d`、`a2ce75f` |
 | P10 | 板级测试与内核验证扩展 | `e80d33c` |
+| P11 | A/B OTA 升级与回滚 | `5564c33` |
 
 每个阶段都有对应的验证记录：`docs/p*-validation.md`。
 
@@ -75,6 +77,9 @@ make boot-test      # 零输入验证完整启动链
 make board-test     # 固件启动模式：12 项板级/内核验证
 make gpio-test      # 直接启动模式：PL061 GPIO 验证
 make package-repo   # 生成签名 opkg feed（Packages + Packages.asc）
+make ab-disk        # 组装 A/B 双槽磁盘镜像
+make ota-bundle     # 生成并签名 OTA 升级包
+make ota-test       # 升级、验签、试启动确认和失败回滚
 ```
 
 一条命令执行完整流水线（环境检查、构建、启动、驱动、仓库、release 和安全测试）：
@@ -100,6 +105,9 @@ make ci
 | `make driver-test` | 验证 RTC MMIO/IRQ/debugfs 和 `/dev/rtc0` |
 | `make board-test` | 固件启动模式运行内核/cgroup/namespace/seccomp 等 12 项检查 |
 | `make gpio-test` | 直接启动模式验证 PL061 GPIO 子系统 |
+| `make ab-disk` | 组装 A/B 双槽磁盘镜像 |
+| `make ota-bundle` | 生成并签名 OTA 升级包 |
+| `make ota-test` | 验证 OTA 升级、试启动确认和失败回滚 |
 | `make opkg-test` | 验证 opkg 安装和升级 |
 | `make release` | 构建并打包 release 镜像 |
 | `make release-test` | 验证 release SSH 安全策略 |
@@ -123,6 +131,9 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 | `artifacts/feed/published/` | `make publish-feed` 生成的待托管目录 |
 | `artifacts/releases/sixlinux-0.1.0/` | 发布包（Image、ext4、tar.bz2、ROM、DTB、SHA256SUMS） |
 | `artifacts/board-test.json`、`artifacts/board-test.log` | 板级验证套件的汇总结果和详细日志 |
+| `artifacts/ab/sixlinux-ab.img` | A/B 双槽磁盘镜像 |
+| `artifacts/ota/` | 签名 OTA 升级包和元数据 |
+| `artifacts/ota-test.json`、`artifacts/ota-test.log` | A/B OTA 测试结果和串口日志 |
 | `artifacts/keys/` | 本地 SSH 密钥和软件源签名私钥（不提交） |
 | `artifacts/*.log` | 各测试串口和运行日志 |
 
@@ -135,10 +146,11 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - `docs/board-test.md`：板级验证套件的设计和运行方式；
 - `docs/opkg-repository.md`：opkg feed 架构和测试；
 - `docs/signed-feed.md`：自有签名软件源的密钥、签名规则和发布流程；
+- `docs/ota-update.md`：A/B 双槽、U-Boot 选槽、回滚和 OTA 升级包设计；
 - `docs/release.md`：release 构建与安全配置；
 - `docs/bring-up-notes.md`：构建和调试故障排查记录；
 - `docs/roadmap.md`：分阶段复现路线；
-- `docs/p1-validation.md` … `docs/p10-validation.md`：各阶段验证记录。
+- `docs/p1-validation.md` … `docs/p11-validation.md`：各阶段验证记录。
 
 ## 安全说明
 
@@ -146,6 +158,7 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - release 镜像锁定 root，禁用密码/键盘交互认证，只允许 `dev` 用户公钥登录；
 - SSH 私钥和软件源签名私钥只保存在本地 `artifacts/keys/`，仓库与镜像只含公钥；
 - opkg 强制校验软件源索引的 GPG 签名，篡改索引会被拒绝；
+- OTA 升级包强制 GPG 验签，篡改包在写槽前就会被拒绝；
 - QEMU 用户网络只在本机转发 2222 端口，不暴露到外部网络。
 
 ## CI

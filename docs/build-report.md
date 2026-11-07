@@ -16,7 +16,7 @@
 
 首次从零构建：3123 个 BitBake 任务全部成功。
 
-加入 U-Boot、RTC 模块、opkg、release 安全配置、板级验证套件、GPG 签名软件源和内核验证扩展后的最终镜像：3547 个任务全部成功，其中 3520 个命中 sstate，实际执行 27 个。
+加入 U-Boot、RTC 模块、opkg、release 安全配置、板级验证套件、GPG 签名软件源、内核验证扩展和 A/B OTA 后的最终镜像：3564 个任务全部成功，其中 3537 个命中 sstate，实际执行 27 个。
 
 ### 发布镜像（`build/qemuarm64-release`）
 
@@ -82,6 +82,15 @@ release 安全（`make release-test`）：
 - root 登录和密码认证被拒绝；
 - `sudo poweroff` 正常关机。
 
+A/B OTA（`make ota-test`）：
+
+- 初始系统运行在 `/dev/vda2`（slot A）；
+- 签名升级包写入 slot B，重启后运行在 `/dev/vda3`，版本标记为 OTA 包版本；
+- 试启动由 systemd 服务确认（`pending=0`）；
+- 篡改升级包验签失败，启动状态不变；
+- 破坏 slot B 后连续两次启动失败，第三次启动自动回滚到 slot A；
+- A/B 磁盘 358 MiB（启动分区 32 MiB + 两个 162 MiB 根分区）。
+
 ## 日志
 
 | 日志 | 内容 |
@@ -92,6 +101,7 @@ release 安全（`make release-test`）：
 | `artifacts/board-test.log`、`artifacts/board-test.json` | 板级验证套件结果 |
 | `artifacts/gpio-test.log` | 直接启动 GPIO 验证 |
 | `artifacts/opkg-test.log`、`artifacts/opkg-http.log` | opkg 仓库测试 |
+| `artifacts/ota-test.log`、`artifacts/ota-test.json` | A/B OTA 测试和串口日志 |
 | `artifacts/release-security.log` | release 安全测试 |
 
 ## 复现
@@ -107,6 +117,9 @@ make board-test
 make gpio-test
 make package-repo
 make opkg-test
+make ab-disk
+make ota-bundle
+make ota-test
 make release
 make release-test
 ```

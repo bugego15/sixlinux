@@ -39,5 +39,9 @@
 | 改内核配置后外部模块 `do_package` 失败 | WSL 下 pseudo 数据库记录的 inode 与重建文件不一致 | `bitbake -c cleansstate sixlinux-rtc-driver` 后重建（dev 和 release 构建目录各做一次） |
 | 板级测试误判 net namespace 未隔离 | 新 netns 中内核仍会创建 `sit0` | 检查改为"主机物理网卡没有泄漏"，而不是要求接口数等于 1 |
 | seccomp 测试取不到 EPERM | glibc `getppid()` 返回 -1 时不设置 errno | 测试改用 `syscall(SYS_getppid)` 判断拦截结果 |
+| U-Boot 无法把 bootcount 写回 FAT | 默认环境在 flash，QEMU 下不可写 | 用 `env export -t` + `fatwrite` 把状态文件写回启动分区 |
+| OTA 状态里根设备显示 `/dev/root` | `root=` 传设备路径时 /proc/mounts 不保留真实设备名 | 通过 `/proc/self/mountinfo` 的 major:minor 查 `/sys/dev/block` 反推 `/dev/vdaN` |
+| A/B 磁盘镜像根分区只有 17 MiB | deploy 目录里 ext4 是符号链接，`stat` 取到链接长度 | 用 `readlink -f` 解析后再计算分区大小 |
+| FAT32 在 32 MiB 启动分区上告簇数不足 | FAT32 建议的最小卷更大 | 启动分区改用 FAT16，U-Boot 读取不受影响 |
 
 这些记录用于后续复现和面试讲解，不把环境问题或工具配置问题描述成真实硬件驱动问题。

@@ -66,4 +66,12 @@
 - 固件启动模式覆盖 12 项检查，新增直接启动模式的 `make gpio-test`；
 - 执行 `make board-test`、`make gpio-test` 和完整 `make ci`。
 
+## 阶段 11：A/B OTA 升级与回滚
+
+- 自组装 A/B 磁盘镜像：FAT 启动分区 + 双 rootfs 槽；
+- U-Boot 启动脚本读取槽位状态，试启动失败时自动回滚；
+- 目标端 `sixlinux-ota` 工具：验签、校验、写非当前槽；
+- 系统服务在启动成功后确认试启动；
+- 执行 `make ota-test` 和完整 `make ci`。
+
 
