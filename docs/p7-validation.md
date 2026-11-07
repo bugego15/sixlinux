@@ -107,7 +107,8 @@ QEMU Cortex-A53 平台实例化测试通过（尚未加载内核）。
 ## 已知事项
 
 - 本地 CI 依赖事前完成过的下载和 sstate 缓存；全新环境第一次运行会显著更久；
-- GitHub Actions 首次云端运行需要重新下载依赖和源码缓存，可能较慢，后续可复用 Actions 缓存；
+- GitHub Actions 首次云端运行在 BitBake 启动阶段失败，原因 Ubuntu 24.04 runner 用 AppArmor 限制了非特权 user namespace（`kernel.apparmor_restrict_unprivileged_userns=1`）。已在 workflow 中加入 sysctl 关闭该限制，并增加清理预装目录、释放运行器磁盘空间的步骤；
+- GitHub 免费 runner 为 4 vCPU、约 14 GB 可用空间，即使清理后完整 Yocto 构建仍显紧张，首次云端运行耗时较长；本地 `make ci` 是权威验证；
 - WSL2 和主机内核 I/O 统计提示属于环境警告，不影响流水线结果；
 - `artifacts/` 目录（含日志和发布产物）不进入版本库，由各次构建重新生成。
 
@@ -120,3 +121,4 @@ QEMU Cortex-A53 平台实例化测试通过（尚未加载内核）。
 - `951dbcc ci: 添加本地 CI 流水线`
 - `d9b40b5 docs: 补全架构、构建、固件和发布文档`
 - `115a5ed ci: 添加 GitHub Actions 工作流`
+- 后续修复：`ci: 修复 GitHub Actions runner 兼容性`（user namespace 与磁盘空间）

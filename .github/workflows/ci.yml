@@ -8,9 +8,18 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 360
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+                      /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h /
 
       - name: Install host dependencies
         run: |
@@ -27,6 +36,13 @@ jobs:
             qemu-system-arm qemu-utils ipxe-qemu expect netcat-openbsd \
             openssh-client iproute2 rsync parted dosfstools mtools
           sudo locale-gen en_US.UTF-8
+
+      - name: Allow unprivileged user namespaces
+        run: |
+          # Ubuntu 24.04 默认用 AppArmor 限制非特权 user namespace，
+          # BitBake 的 fakeroot 需要打开该开关才能运行。
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
 
       - name: Cache Yocto inputs
         uses: actions/cache@v4

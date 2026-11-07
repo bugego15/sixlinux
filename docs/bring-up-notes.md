@@ -34,5 +34,7 @@
 | 自动化测试与手工 QEMU 抢 2222 端口 | 两者都使用 hostfwd 2222 | 自动化测试用 `SSH_PORT=none` 关闭转发，手工 `make run` 保留 |
 | release 手工 SSH 偶发 banner 超时 | 只探测到 TCP 端口就立即 SSH，sshd 尚未就绪 | 测试先等待登录提示再发起 SSH |
 | WSL 后台 `nohup` 启动的 QEMU 随会话退出 | WSL 实例在最后一个前台进程结束后回收 | 用持续运行的前台命令或工具后台任务托管 QEMU |
+| GitHub Actions 上 BitBake 立即失败 | Ubuntu 24.04 runner 通过 AppArmor 限制非特权 user namespace | workflow 中执行 `sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` |
+| GitHub Actions 运行器磁盘不足 | 免费 runner 只有约 14 GB 可用空间 | workflow 先删除 Android、.NET、GHC、CodeQL 等预装目录释放空间 |
 
 这些记录用于后续复现和面试讲解，不把环境问题或工具配置问题描述成真实硬件驱动问题。
