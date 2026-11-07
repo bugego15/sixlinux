@@ -1,0 +1,12 @@
+[Unit]
+Description=SixLinux A/B OTA trial boot confirmation
+After=multi-user.target
+ConditionPathExists=/dev/vda1
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sixlinux-ota mark-good
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

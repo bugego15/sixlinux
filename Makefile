@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo publish-feed run run-direct boot-test boot-test-direct driver-test board-test gpio-test opkg-test release release-test ci
+.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo publish-feed run run-direct boot-test boot-test-direct driver-test board-test gpio-test opkg-test ab-disk ota-bundle ota-test release release-test ci
 
 help:
 	@printf '%s\n' \
@@ -21,6 +21,9 @@ help:
 	  '  make board-test       Run the on-target board validation suite' \
 	  '  make gpio-test        Verify PL061 GPIO in direct-boot mode' \
 	  '  make opkg-test        Verify opkg install and upgrade over HTTP' \
+	  '  make ab-disk          Build the A/B disk image for OTA' \
+	  '  make ota-bundle      Build and sign an OTA upgrade bundle' \
+	  '  make ota-test        Verify A/B OTA upgrade and rollback' \
 	  '  make release          Build and package the secure release image' \
 	  '  make release-test     Verify release SSH security and poweroff' \
 	  '  make ci               Run the complete local CI pipeline'
@@ -71,6 +74,15 @@ gpio-test:
 
 opkg-test: package-repo
 	@python3 tests/opkg-repo.py
+
+ab-disk:
+	@bash scripts/build-ab-disk.sh
+
+ota-bundle:
+	@bash scripts/build-ota-bundle.sh
+
+ota-test: ab-disk ota-bundle
+	@python3 tests/ota-test.py
 
 release:
 	@bash scripts/release-sixlinux.sh

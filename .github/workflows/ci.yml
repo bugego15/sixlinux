@@ -34,7 +34,7 @@ jobs:
             libssl-dev device-tree-compiler swig python3-dev python3-setuptools \
             uuid-dev libgnutls28-dev openssl bc libncurses-dev libelf-dev \
             qemu-system-arm qemu-utils ipxe-qemu expect netcat-openbsd \
-            openssh-client iproute2 rsync parted dosfstools mtools
+            openssh-client iproute2 rsync parted dosfstools mtools e2fsprogs
           sudo locale-gen en_US.UTF-8
 
       - name: Allow unprivileged user namespaces

@@ -14,7 +14,7 @@ required_commands=(
     qemu-system-aarch64 qemu-img
     aarch64-linux-gnu-gcc aarch64-linux-gnu-g++
     dtc fdtput chrpath socat cpio zstd lz4
-    bison flex openssl expect parted
+    bison flex openssl expect parted sfdisk mkfs.vfat mcopy debugfs
     ssh ssh-keygen sha256sum gpg gpgv
 )
 missing=()

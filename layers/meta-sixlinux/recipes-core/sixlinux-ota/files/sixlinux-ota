@@ -1,0 +1,136 @@
+#!/bin/sh
+# SixLinux A/B OTA 升级工具
+set -eu
+
+STATE_DEV="${STATE_DEV:-/dev/vda1}"
+MNT="${MNT:-/run/sixlinux-boot}"
+VERSION_FILE=/etc/sixlinux-ota-version
+KEYRING="/etc/opkg/gpg"
+
+log() {
+    echo "sixlinux-ota: $*"
+}
+
+die() {
+    echo "sixlinux-ota: error: $*" >&2
+    exit 1
+}
+
+mount_boot() {
+    mkdir -p "$MNT"
+    mountpoint -q "$MNT" 2>/dev/null && return 0
+    [ -b "$STATE_DEV" ] || die "$STATE_DEV 不存在（当前不是 A/B 磁盘启动）"
+    mount -t vfat "$STATE_DEV" "$MNT" || die "挂载 $STATE_DEV 失败"
+}
+
+umount_boot() {
+    mountpoint -q "$MNT" 2>/dev/null && umount "$MNT"
+}
+
+state_get() {
+    grep -E "^$1=" "$MNT/state.env" 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
+state_put() {
+    printf 'slot=%s\nprev=%s\npending=%s\nbootcount=%s\n' "$1" "$2" "$3" "$4" > "$MNT/state.env"
+    sync
+}
+
+running_root() {
+    # root= 是设备路径时 /proc/mounts 会显示 /dev/root，
+    # 因此通过 mountinfo 的 major:minor 反查真实块设备名。
+    mm="$(awk '$5 == "/" { print $3; exit }' /proc/self/mountinfo)"
+    if [ -n "$mm" ] && [ -e "/sys/dev/block/$mm" ]; then
+        name="$(readlink -f "/sys/dev/block/$mm" | awk -F/ '{ print $NF }')"
+        echo "/dev/$name"
+    else
+        awk '$2 == "/" { print $1; exit }' /proc/mounts
+    fi
+}
+
+cmd_status() {
+    mount_boot
+    echo "boot state ($STATE_DEV):"
+    cat "$MNT/state.env" 2>/dev/null || echo "  (没有状态文件)"
+    umount_boot
+    echo "running root: $(running_root)"
+    if [ -f "$VERSION_FILE" ]; then
+        echo "system version: $(cat "$VERSION_FILE")"
+    fi
+}
+
+cmd_mark_good() {
+    mount_boot
+    pending="$(state_get pending)"
+    if [ "${pending:-0}" = "1" ]; then
+        slot="$(state_get slot)"
+        prev="$(state_get prev)"
+        state_put "${slot:-a}" "${prev:-b}" 0 0
+        log "trial boot confirmed for slot ${slot:-a}"
+    fi
+    umount_boot
+}
+
+cmd_install() {
+    url="${1:-}"
+    [ -n "$url" ] || die "用法: sixlinux-ota install <bundle-url>"
+
+    work="$(mktemp -d /tmp/ota.XXXXXX)"
+    trap 'rm -rf "$work"; umount_boot 2>/dev/null || true' EXIT INT TERM
+
+    mount_boot
+    slot="$(state_get slot)"
+    prev="$(state_get prev)"
+    [ -n "$slot" ] || slot=a
+    [ -n "$prev" ] || prev=b
+
+    if [ "$slot" = "a" ]; then
+        target=b
+        target_dev=/dev/vda3
+    else
+        target=a
+        target_dev=/dev/vda2
+    fi
+    log "current slot ${slot}, upgrading to ${target} (${target_dev})"
+
+    log "downloading $url"
+    wget -q -O "$work/bundle.tar.gz" "$url" || die "下载升级包失败"
+    wget -q -O "$work/bundle.tar.gz.sig" "$url.sig" || die "下载签名失败"
+
+    gpg --homedir "$KEYRING" --batch --verify "$work/bundle.tar.gz.sig" \
+        "$work/bundle.tar.gz" >/dev/null 2>&1 || die "升级包签名校验失败"
+    log "signature ok"
+
+    tar -xzf "$work/bundle.tar.gz" -C "$work" || die "解包失败"
+    [ -f "$work/rootfs.ext4" ] || die "升级包缺少 rootfs.ext4"
+    (cd "$work" && sha256sum -c manifest.sha256 >/dev/null) || die "升级包内容校验失败"
+    log "payload checksum ok"
+
+    log "writing rootfs to ${target_dev}"
+    dd if="$work/rootfs.ext4" of="$target_dev" bs=1M || die "写入 ${target_dev} 失败"
+    sync
+
+    state_put "$target" "$slot" 1 0
+    log "slot ${target} staged, pending reboot"
+
+    if [ -f "$work/version" ]; then
+        log "new version: $(cat "$work/version")"
+    fi
+}
+
+case "${1:-status}" in
+    status)
+        cmd_status
+        ;;
+    mark-good)
+        cmd_mark_good
+        ;;
+    install)
+        shift
+        cmd_install "$@"
+        ;;
+    *)
+        echo "用法: sixlinux-ota {status|install <bundle-url>|mark-good}" >&2
+        exit 2
+        ;;
+esac

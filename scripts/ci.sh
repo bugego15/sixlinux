@@ -13,6 +13,7 @@ make boot-test
 make driver-test
 make board-test
 make gpio-test
+make ota-test
 make opkg-test
 make release
 make release-test
