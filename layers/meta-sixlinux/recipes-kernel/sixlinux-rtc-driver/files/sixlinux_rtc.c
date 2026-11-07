@@ -10,12 +10,14 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/rtc.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
 
 #define RTC_DR          0x00
 #define RTC_MR          0x04
+#define RTC_LR          0x08
 #define RTC_CR          0x0c
 #define RTC_IMSC        0x10
 #define RTC_MIS         0x18
@@ -37,6 +39,7 @@ struct sixlinux_rtc {
     u32 irq_count;
     spinlock_t lock;
     struct dentry *debugfs_dir;
+    struct rtc_device *rtc_dev;
 };
 
 static void sixlinux_rtc_arm_alarm(struct sixlinux_rtc *rtc)
@@ -49,6 +52,33 @@ static void sixlinux_rtc_arm_alarm(struct sixlinux_rtc *rtc)
     writel(RTC_BIT_AI, rtc->base + RTC_IMSC);
     spin_unlock_irqrestore(&rtc->lock, flags);
 }
+
+static int sixlinux_rtc_read_time(struct device *dev, struct rtc_time *tm)
+{
+    struct sixlinux_rtc *rtc = dev_get_drvdata(dev);
+    u32 seconds = readl(rtc->base + RTC_DR);
+
+    rtc_time64_to_tm(seconds, tm);
+    return 0;
+}
+
+static int sixlinux_rtc_set_time(struct device *dev, struct rtc_time *tm)
+{
+    struct sixlinux_rtc *rtc = dev_get_drvdata(dev);
+    unsigned long flags;
+    u32 seconds = (u32)rtc_tm_to_time64(tm);
+
+    spin_lock_irqsave(&rtc->lock, flags);
+    writel(seconds, rtc->base + RTC_LR);
+    spin_unlock_irqrestore(&rtc->lock, flags);
+
+    return 0;
+}
+
+static const struct rtc_class_ops sixlinux_rtc_ops = {
+    .read_time = sixlinux_rtc_read_time,
+    .set_time = sixlinux_rtc_set_time,
+};
 
 static irqreturn_t sixlinux_rtc_irq(int irq, void *dev_id)
 {
@@ -136,6 +166,16 @@ static int sixlinux_rtc_probe(struct platform_device *pdev)
     debugfs_create_u32("irq_count", 0444, rtc->debugfs_dir, &rtc->irq_count);
     debugfs_create_file("trigger", 0222, rtc->debugfs_dir, rtc,
                         &sixlinux_rtc_trigger_fops);
+
+    rtc->rtc_dev = devm_rtc_allocate_device(&pdev->dev);
+    if (IS_ERR(rtc->rtc_dev))
+        return PTR_ERR(rtc->rtc_dev);
+    rtc->rtc_dev->ops = &sixlinux_rtc_ops;
+
+    ret = devm_rtc_register_device(rtc->rtc_dev);
+    if (ret)
+        return dev_err_probe(&pdev->dev, ret,
+                             "failed to register RTC device\n");
 
     sixlinux_rtc_arm_alarm(rtc);
 

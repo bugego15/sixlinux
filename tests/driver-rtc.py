@@ -65,6 +65,16 @@ def main() -> int:
 
         numeric_line(command_output(child, "cat /sys/kernel/debug/sixlinux_rtc/data"), "RTC 数据")
 
+        rtc_dev = command_output(child, "ls -l /dev/rtc0")
+        if "rtc0" not in rtc_dev or "No such file" in rtc_dev:
+            raise RuntimeError(f"标准 RTC 设备节点未创建：{rtc_dev!r}")
+        rtc_name = command_output(child, "cat /sys/class/rtc/rtc0/name")
+        if "sixlinux_rtc" not in rtc_name:
+            raise RuntimeError(f"RTC 设备名不匹配：{rtc_name!r}")
+        rtc_epoch = numeric_line(command_output(child, "cat /sys/class/rtc/rtc0/since_epoch"), "RTC epoch")
+        if rtc_epoch < 1600000000:
+            raise RuntimeError(f"RTC 时间不合理：{rtc_epoch}")
+
         command_output(child, "sleep 2")
         first_count = numeric_line(command_output(child, "cat /sys/kernel/debug/sixlinux_rtc/irq_count"), "首次 IRQ 计数")
         if first_count < 1:
@@ -82,7 +92,7 @@ def main() -> int:
 
         child.sendline("poweroff")
         child.expect(pexpect.EOF, timeout=90)
-        print(f"RTC platform driver MMIO/IRQ 验证通过：AMBA ID=0x{rtc_id:08x}, IRQ {first_count}→{second_count}")
+        print(f"RTC platform driver 验证通过：AMBA ID=0x{rtc_id:08x}, IRQ {first_count}→{second_count}, epoch={rtc_epoch}")
         print(f"测试日志：{LOG_PATH}")
         return 0
     except Exception as exc:
