@@ -16,11 +16,11 @@
 
 首次从零构建：3123 个 BitBake 任务全部成功。
 
-加入 U-Boot、RTC 模块、opkg 和 release 安全配置后的最终镜像：3279 个任务全部成功，其中 3233 个命中 sstate，实际执行 46 个。
+加入 U-Boot、RTC 模块、opkg、release 安全配置和板级验证套件后的最终镜像：3296 个任务全部成功，其中 3269 个命中 sstate，实际执行 27 个。
 
 ### 发布镜像（`build/qemuarm64-release`）
 
-独立构建目录和 release 模板：3279 个任务全部成功，其中 3265 个命中 sstate，实际执行 14 个，约 4 分钟完成。
+独立构建目录和 release 模板：3296 个任务全部成功，其中 3232 个命中 sstate，实际执行 64 个，约 4 分钟完成。
 
 ### 产物大小
 
@@ -46,7 +46,19 @@
 RTC 驱动（`make driver-test`）：
 
 - platform 绑定成功，AMBA ID `0x00141031`；
-- MMIO 数据可读，alarm 中断计数 `1 → 2`。
+- MMIO 数据可读，alarm 中断计数 `1 → 2`；
+- 注册标准 `/dev/rtc0`，sysfs `name` 为 `sixlinux_rtc`。
+
+板级验证（`make board-test`，在目标系统内运行 `sixlinux-boardtest`）：
+
+- `cpu`：MIDR `0x410fd034`、页大小 4096、缓存行 64、NEON 与 CRC32 指令实测通过；
+- `smp`：2 个 CPU、4 线程 atomic 计数 4000000、亲和性 CPU1、futex 唤醒约 872us；
+- `mm`：MemTotal 1987MB、64MB mmap、mlock、memcpy 约 1.0TB/s（仿真内存）；
+- `irq`：1ms POSIX timer 共 1481 次信号，平均间隔 1013us、最大 4630us；
+- `rtc`：`/dev/rtc0` ioctl 读时/写时回读、sysfs 与系统时间一致；
+- `blk`：`/dev/vda` ext4 超级块正确，顺序写 78.8MB/s、读 2223MB/s，支持 O_DIRECT；
+- `net`：loopback TCP 501MB/s、UDP 正常、通过 `10.0.2.2:8080` 取回 HTTP 内容、DNS 解析正常；
+- `systemd`：临时服务启停、journald 日志和 `systemd-run` 定时器全部正常。
 
 opkg 仓库（`make opkg-test`）：
 
@@ -66,6 +78,7 @@ release 安全（`make release-test`）：
 | `artifacts/firmware-boot.log` | TF-A/U-Boot/Linux 自动启动 |
 | `artifacts/qemu-boot.log` | 直接内核启动 |
 | `artifacts/rtc-driver-test.log` | RTC 驱动测试 |
+| `artifacts/board-test.log`、`artifacts/board-test.json` | 板级验证套件结果 |
 | `artifacts/opkg-test.log`、`artifacts/opkg-http.log` | opkg 仓库测试 |
 | `artifacts/release-security.log` | release 安全测试 |
 
@@ -78,6 +91,7 @@ make build
 make firmware
 make boot-test
 make driver-test
+make board-test
 make package-repo
 make opkg-test
 make release

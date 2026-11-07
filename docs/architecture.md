@@ -46,8 +46,10 @@ QEMU virt → Linux Image + ext4 rootfs → systemd
 - 两个 CPU 上线；
 - VirtIO 块设备 `/dev/vda`；
 - VirtIO 用户网络，hostfwd 2222→22；
+- 标准 RTC 设备 `/dev/rtc0`（项目 PL031 platform driver 注册）；
 - systemd `running`；
-- PSCI 正常关机。
+- PSCI 正常关机；
+- 板级验证套件覆盖 CPU/SMP/内存/中断/RTC/块设备/网络/systemd 共 8 项。
 
 ## 边界
 

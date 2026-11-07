@@ -26,7 +26,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 | P5 | opkg 在线软件仓库 | `3846a02`、`16a3305` |
 | P6 | release 安全登录与发布打包 | `d7fb933`、`81434d9` |
 | P7 | 本地 CI、GitHub Actions 与文档 | `951dbcc`、`d9b40b5`、`115a5ed`、`31ae6a0`、`24a9dad` |
-| P8 | 板级验证套件与标准 rtc0 设备 | 本阶段提交 |
+| P8 | 板级验证套件与标准 rtc0 设备 | `eb7aba7`、`a78aac6` |
 
 每个阶段都有对应的验证记录：`docs/p*-validation.md`。
 
