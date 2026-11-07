@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo run run-direct boot-test boot-test-direct driver-test opkg-test release release-test ci
+.PHONY: help check-env smoke-qemu fetch-poky build firmware package-repo run run-direct boot-test boot-test-direct driver-test board-test opkg-test release release-test ci
 
 help:
 	@printf '%s\n' \
@@ -17,6 +17,7 @@ help:
 	  '  make boot-test        Verify the TF-A/U-Boot/Linux boot chain' \
 	  '  make boot-test-direct Verify direct kernel boot' \
 	  '  make driver-test      Verify RTC MMIO, IRQ and debugfs' \
+	  '  make board-test       Run the on-target board validation suite' \
 	  '  make opkg-test        Verify opkg install and upgrade over HTTP' \
 	  '  make release          Build and package the secure release image' \
 	  '  make release-test     Verify release SSH security and poweroff' \
@@ -56,6 +57,9 @@ boot-test-direct:
 
 driver-test:
 	@python3 tests/driver-rtc.py
+
+board-test:
+	@python3 tests/board-suite.py
 
 opkg-test:
 	@python3 tests/opkg-repo.py

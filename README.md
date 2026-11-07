@@ -8,7 +8,8 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 
 - TF-A BL1/BL2/BL31 + U-Boot BL33 的完整固件启动链，`secure=on`、GICv3、PSCI 走 SMC；
 - 零输入自动启动：`CONFIG_BOOTCOMMAND` 固化 `setenv bootargs` + `booti`；
-- PL031 RTC platform driver：设备树绑定、MMIO、IRQ、debugfs；
+- PL031 RTC platform driver：设备树绑定、MMIO、IRQ、debugfs，并注册标准 `/dev/rtc0`；
+- 板级验证套件：在目标系统内运行 CPU、SMP、内存、中断、RTC、块设备、网络和 systemd 共 8 项检查；
 - opkg 在线软件仓库：hello 1.0/1.1 安装与升级；
 - release 安全登录：无 debug-tweaks、root/密码禁用、dev 用户 ed25519 公钥 + sudo；
 - 本地 CI 和 GitHub Actions 流水线。
@@ -24,7 +25,8 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 | P4 | PL031 RTC platform driver | `c57d8ba`、`a2988f7` |
 | P5 | opkg 在线软件仓库 | `3846a02`、`16a3305` |
 | P6 | release 安全登录与发布打包 | `d7fb933`、`81434d9` |
-| P7 | 本地 CI、GitHub Actions 与文档 | 本阶段提交 |
+| P7 | 本地 CI、GitHub Actions 与文档 | `951dbcc`、`d9b40b5`、`115a5ed`、`31ae6a0`、`24a9dad` |
+| P8 | 板级验证套件与标准 rtc0 设备 | 本阶段提交 |
 
 每个阶段都有对应的验证记录：`docs/p*-validation.md`。
 
@@ -67,6 +69,7 @@ make fetch-poky
 make build          # 自动生成 SSH 密钥并构建开发镜像
 make firmware       # 构建 TF-A、U-Boot 和修正后的 DTB
 make boot-test      # 零输入验证完整启动链
+make board-test     # 在目标系统里运行 8 项板级验证
 ```
 
 一条命令执行完整流水线（环境检查、构建、启动、驱动、仓库、release 和安全测试）：
@@ -88,7 +91,8 @@ make ci
 | `make run` | 交互式启动完整固件链 |
 | `make run-direct` | 直接内核启动（调试回退路径） |
 | `make boot-test` | 自动验证 TF-A → U-Boot → Linux |
-| `make driver-test` | 验证 RTC MMIO/IRQ/debugfs |
+| `make driver-test` | 验证 RTC MMIO/IRQ/debugfs 和 `/dev/rtc0` |
+| `make board-test` | 在目标系统里运行 CPU/SMP/内存/中断/RTC/块设备/网络/systemd 检查 |
 | `make opkg-test` | 验证 opkg 安装和升级 |
 | `make release` | 构建并打包 release 镜像 |
 | `make release-test` | 验证 release SSH 安全策略 |
@@ -110,6 +114,7 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 | `build/qemuarm64-release/tmp/deploy/images/sixlinux-qemuarm64/` | release 镜像产物 |
 | `build/qemuarm64/tmp/deploy/ipk/` | opkg feed |
 | `artifacts/releases/sixlinux-0.1.0/` | 发布包（Image、ext4、tar.bz2、ROM、DTB、SHA256SUMS） |
+| `artifacts/board-test.json`、`artifacts/board-test.log` | 板级验证套件的汇总结果和详细日志 |
 | `artifacts/keys/` | 本地 SSH 密钥（不提交） |
 | `artifacts/*.log` | 各测试串口和运行日志 |
 
@@ -119,11 +124,12 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - `docs/build-report.md`：构建结果、产物大小和验证汇总；
 - `docs/firmware-report.md`：TF-A/U-Boot 固件链细节；
 - `docs/rtc-driver.md`：RTC platform driver 设计与验证；
+- `docs/board-test.md`：板级验证套件的设计和运行方式；
 - `docs/opkg-repository.md`：opkg feed 架构和测试；
 - `docs/release.md`：release 构建与安全配置；
 - `docs/bring-up-notes.md`：构建和调试故障排查记录；
 - `docs/roadmap.md`：分阶段复现路线；
-- `docs/p1-validation.md` … `docs/p7-validation.md`：各阶段验证记录。
+- `docs/p1-validation.md` … `docs/p8-validation.md`：各阶段验证记录。
 
 ## 安全说明
 

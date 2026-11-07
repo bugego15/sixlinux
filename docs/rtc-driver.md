@@ -39,6 +39,18 @@ debugfs 位于 `/sys/kernel/debug/sixlinux_rtc/`：
 
 AMBA ID 使用 `0x000fffff` 掩码比较，允许变体位，与上游驱动的 ID 匹配方式一致。
 
+## 标准 RTC 设备
+
+在保留 debugfs 实验接口的同时，驱动通过 `devm_rtc_allocate_device()` /
+`devm_rtc_register_device()` 注册标准 RTC 设备：
+
+- `rtc_class_ops.read_time()` 读取 `RTC_DR` 并转换成 `struct rtc_time`；
+- `rtc_class_ops.set_time()` 写入 `RTC_LR` 装载寄存器；
+- 注册后内核生成 `/dev/rtc0`，同时出现 `/sys/class/rtc/rtc0/`
+  （`name`、`since_epoch`、`date`、`time` 等）；
+- 板级验证套件的 `rtc` 子命令通过 `RTC_RD_TIME` / `RTC_SET_TIME`
+  ioctl 和 sysfs 验证这一层，不再只依赖 debugfs。
+
 ## Yocto 集成
 
 - `sixlinux-rtc-driver_1.0.bb` 使用 `inherit module`；
@@ -56,6 +68,9 @@ AMBA ID 使用 `0x000fffff` 掩码比较，允许变体位，与上游驱动的 
 - AMBA ID 为 `0x00141031`；
 - 第一次 alarm 后 `irq_count = 1`；
 - debugfs 写入 `trigger` 后 `irq_count = 2`；
+- 标准设备节点 `/dev/rtc0` 创建成功，`/sys/class/rtc/rtc0/name` 为 `sixlinux_rtc`，`since_epoch` 为合理时间；
 - 系统正常关机。
+
+`make board-test` 的 `rtc` 子命令进一步用 ioctl 对时/读时和 sysfs 进行验证。
 
 完整日志：`artifacts/rtc-driver-test.log`。

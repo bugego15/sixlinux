@@ -11,6 +11,7 @@ make firmware
 make package-repo
 make boot-test
 make driver-test
+make board-test
 make opkg-test
 make release
 make release-test
