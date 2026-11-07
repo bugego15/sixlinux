@@ -4,6 +4,8 @@
 from pathlib import Path
 import sys
 
+import os
+
 import pexpect
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -37,6 +39,7 @@ def main() -> int:
         encoding="utf-8",
         codec_errors="replace",
         timeout=240,
+        env=dict(os.environ, SSH_PORT="none"),
     )
     child.logfile = log
 

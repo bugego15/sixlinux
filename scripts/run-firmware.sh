@@ -30,6 +30,13 @@ done
 printf 'SixLinux 将由 TF-A 和 U-Boot 自动启动。\n'
 printf '退出 QEMU：登录后执行 poweroff，或按 Ctrl-A 再按 X。\n'
 
+# 串口自动化测试不需要 SSH 转发；SSH_PORT=none 可关闭，避免与本机手工 QEMU 冲突。
+SSH_PORT="${SSH_PORT:-2222}"
+netdev="user,id=net0"
+if [[ -n "$SSH_PORT" && "$SSH_PORT" != "none" ]]; then
+    netdev+=",hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22"
+fi
+
 qemu_args=(
     -machine virt,secure=on,gic-version=3
     -cpu cortex-a53
@@ -41,7 +48,7 @@ qemu_args=(
     -drive "file=$ROOTFS,if=none,format=raw,id=disk0"
     -device virtio-blk-pci,drive=disk0
     -device virtio-net-pci,netdev=net0,mac=52:54:00:12:35:02
-    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22
+    -netdev "$netdev"
     -object rng-random,filename=/dev/urandom,id=rng0
     -device virtio-rng-pci,rng=rng0
     -serial mon:stdio

@@ -44,6 +44,8 @@ qemu-system-aarch64 \
 fdtput -t s "$DTB" /psci method smc
 # secure=on 下该 GPIO 不允许非安全 Linux 直接枚举访问。
 fdtput -t s "$DTB" /pl061@9030000 status disabled
+# 移除 AMBA primecell 绑定，让 PL031 作为 platform device 交给项目驱动。
+fdtput -t s "$DTB" /pl031@9010000 compatible arm,pl031
 
 printf '固件构建完成：%s\n' "$TFA_DIR/build/qemu/debug/qemu_fw.rom"
 printf 'U-Boot 产物：%s\n' "$UBOOT_BIN"

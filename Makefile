@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help check-env fetch-poky build firmware run run-direct boot-test boot-test-direct
+.PHONY: help check-env fetch-poky build firmware run run-direct boot-test boot-test-direct driver-test
 
 help:
 	@printf '%s\n' \
@@ -13,7 +13,8 @@ help:
 	  '  make run              Boot through TF-A and U-Boot interactively' \
 	  '  make run-direct       Boot directly with a kernel and rootfs' \
 	  '  make boot-test        Verify the TF-A/U-Boot/Linux boot chain' \
-	  '  make boot-test-direct Verify direct kernel boot'
+	  '  make boot-test-direct Verify direct kernel boot' \
+	  '  make driver-test      Verify RTC MMIO, IRQ and debugfs'
 
 check-env:
 	@bash scripts/check-env.sh
@@ -40,3 +41,6 @@ boot-test:
 
 boot-test-direct:
 	@python3 tests/boot-qemuarm64.py
+
+driver-test:
+	@python3 tests/driver-rtc.py
