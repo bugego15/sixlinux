@@ -26,11 +26,9 @@ for artifact in "$FIRMWARE" "$KERNEL" "$ROOTFS" "$DTB"; do
     fi
 done
 
-# P2 阶段只验证手动启动链，自动化 bootcmd 在后续阶段实现。
-printf 'SixLinux 由 TF-A 和 U-Boot 启动，进入 U-Boot 命令行后手工执行：\n\n'
-printf '  setenv bootargs root=/dev/vda rw console=ttyAMA0 earlycon=pl011,0x09000000 keep_bootcon ip=dhcp swiotlb=0\n'
-printf '  booti 0x40200000 - 0x44000000\n\n'
-printf '退出 QEMU：先执行 poweroff，或按 Ctrl-A 再按 X。\n'
+# bootcmd 由 meta-sixlinux 的 U-Boot 配置片段固化，启动过程无需人工输入。
+printf 'SixLinux 将由 TF-A 和 U-Boot 自动启动。\n'
+printf '退出 QEMU：登录后执行 poweroff，或按 Ctrl-A 再按 X。\n'
 
 qemu_args=(
     -machine virt,secure=on,gic-version=3

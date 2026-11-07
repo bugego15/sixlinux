@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""手工输入 U-Boot 命令，验证 TF-A → U-Boot → SixLinux 启动链。"""
+"""零输入验证 TF-A → U-Boot → SixLinux 自动启动链。"""
 
 from pathlib import Path
 import sys
@@ -9,12 +9,6 @@ import pexpect
 ROOT_DIR = Path(__file__).resolve().parents[1]
 LOG_PATH = ROOT_DIR / "artifacts" / "firmware-boot.log"
 ROOT_PROMPT = r"root@[^\r\n]*# "
-UBOOT_PROMPT = r"=> "
-BOOTARGS = (
-    "root=/dev/vda rw console=ttyAMA0 earlycon=pl011,0x09000000 "
-    "keep_bootcon ip=dhcp swiotlb=0"
-)
-BOOT_COMMAND = "booti 0x40200000 - 0x44000000"
 
 
 def command_output(child: pexpect.spawn, command: str, timeout: int = 60) -> str:
@@ -33,17 +27,6 @@ def require_line(output: str, expected: str, description: str) -> None:
         raise RuntimeError(f"{description}检查失败，期望 {expected!r}，实际输出：{output!r}")
 
 
-def wait_uboot_prompt(child: pexpect.spawn, timeout: int = 300) -> None:
-    """等待 U-Boot 命令行。
-
-    上游 qemu_arm64_defconfig 默认启用标准启动扫描，没有可启动介质时会扫描
-    网络并最终回到命令行。这里先让扫描超时，保证走的是手工命令路径。
-    """
-    child.expect(r"U-Boot 2024\.01", timeout=timeout)
-    child.sendline("")
-    child.expect(UBOOT_PROMPT, timeout=timeout)
-
-
 def main() -> int:
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     log = LOG_PATH.open("w", encoding="utf-8")
@@ -58,14 +41,7 @@ def main() -> int:
     child.logfile = log
 
     try:
-        wait_uboot_prompt(child)
-
-        # P2 阶段由测试代替人工输入，P3 再把这两条命令固化进 U-Boot。
-        child.sendline(f"setenv bootargs {BOOTARGS}")
-        child.expect(UBOOT_PROMPT, timeout=30)
-        child.sendline(BOOT_COMMAND)
-        child.expect("Starting kernel", timeout=120)
-
+        # 登录前不向 U-Boot 或 Linux 发送任何内容，验证 CONFIG_BOOTCOMMAND 自动执行。
         index = child.expect([r"login:", ROOT_PROMPT], timeout=240)
         if index == 0:
             child.sendline("root")
@@ -90,18 +66,21 @@ def main() -> int:
             ("BL1", "TF-A BL1 启动阶段"),
             ("BL31", "TF-A BL31 启动阶段"),
             ("U-Boot 2024.01", "U-Boot 启动阶段"),
-            (f"setenv bootargs {BOOTARGS}", "手工写入 bootargs"),
-            (BOOT_COMMAND, "手工 booti 命令"),
+            ("## Flattened Device Tree blob at 44000000", "自动 booti 加载设备树"),
             ("Starting kernel", "Linux 内核启动"),
         ):
             if marker not in boot_log:
                 raise RuntimeError(f"串口日志缺少{description}：{marker}")
+        if "Scanning for bootflows" in boot_log:
+            raise RuntimeError("U-Boot 未按固化的 CONFIG_BOOTCOMMAND 启动")
+        if "setenv bootargs" in boot_log:
+            raise RuntimeError("串口日志出现手工输入痕迹，自动启动验证不成立")
 
-        print("TF-A → U-Boot → SixLinux 手工启动链验证通过。")
+        print("TF-A → U-Boot → SixLinux 零输入自动启动验证通过。")
         print(f"串口日志：{LOG_PATH}")
         return 0
     except Exception as exc:
-        print(f"固件启动链测试失败：{exc}", file=sys.stderr)
+        print(f"固件自动启动测试失败：{exc}", file=sys.stderr)
         print(f"请检查串口日志：{LOG_PATH}", file=sys.stderr)
         child.close(force=True)
         return 1
