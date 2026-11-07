@@ -150,6 +150,7 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - `docs/release.md`：release 构建与安全配置；
 - `docs/bring-up-notes.md`：构建和调试故障排查记录；
 - `docs/roadmap.md`：分阶段复现路线；
+- `docs/final-report.md`：最终验收报告（完整测试、产物体检和结论）；
 - `docs/p1-validation.md` … `docs/p11-validation.md`：各阶段验证记录。
 
 ## 安全说明
