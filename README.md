@@ -4,18 +4,20 @@
 
 ## 当前阶段
 
-**阶段 5（P5）：opkg 在线软件仓库。**
+**阶段 6（P6）：release 安全登录。**
 
-本阶段把镜像升级为可安装软件包的系统：使用 `package_ipk` 生成软件包，在 WSL 中通过 HTTP 提供 feed，目标系统用 opkg 完成 `update`、指定版本安装和在线升级。
+本阶段在开发镜像之外增加独立的发布构建：去掉 `debug-tweaks`，锁定 root，只允许 `dev` 用户通过 ed25519 公钥登录，并用 sudo 执行管理操作。
 
 具体改动：
 
-- 新增 `sixlinux-hello` 的 1.0 和 1.1 两套 recipe 与源码，`scripts/build-package-repo.sh` 依次构建两个版本，再用 `opkg-make-index -a` 生成保留多版本的 feed；
-- 新增 `sixlinux-opkg-config`，把 `all`、`cortexa53`、`sixlinux_qemuarm64` 三个源写入 `/etc/opkg/sixlinux.conf`，地址指向 QEMU slirp 网关 `10.0.2.2:8080`；
-- 镜像启用 `package-management` 并安装仓库配置；
-- `tests/opkg-repo.py` 自动启动 HTTP 服务、登录系统并验证安装与升级。
+- 新增 release 构建模板 `conf/templates/qemuarm64-release/`，`EXTRA_IMAGE_FEATURES = ""`；
+- 新增 `sixlinux-security`：创建 `dev` 用户（空密码字段）、`sudo` 免密、sshd drop-in 配置（禁止 root 和密码登录、只允许 dev 公钥）、预装 ed25519 主机密钥和授权公钥；
+- `scripts/generate-keys.sh` 在构建前生成 dev 登录密钥和 SSH 主机密钥，私钥只保存在 `artifacts/keys/`，layer 中只保留构建期副本且不提交；
+- `scripts/build-release.sh` 使用 release 模板构建到 `build/qemuarm64-release`；
+- `scripts/release-sixlinux.sh` 打包镜像、TF-A ROM、DTB、manifest 和 `SHA256SUMS` 到 `artifacts/releases/sixlinux-0.1.0/`；
+- `tests/release-security.py` 通过 SSH 验证公钥登录、sudo、root/密码拒绝和 sshd 配置。
 
-后续阶段再加入 release 安全登录和 CI。
+后续阶段再加入本地 CI 和 GitHub Actions。
 
 ## 开发环境
 
@@ -48,29 +50,55 @@ make boot-test
 make driver-test
 make package-repo
 make opkg-test
+make release
+make release-test
 ```
 
-`make package-repo` 构建 hello 1.0/1.1 并生成 `build/qemuarm64/tmp/deploy/ipk` 下的软件仓库索引。
+`make build` 前会自动调用 `scripts/generate-keys.sh` 生成 SSH 密钥；私钥只存在于 `artifacts/keys/`，不要提交。
 
-`make opkg-test` 启动本地 HTTP feed 和 SixLinux，检查：
+`make release` 使用独立构建目录和 release 模板，产出 `artifacts/releases/sixlinux-0.1.0/`：
 
-- `opkg update` 成功读取三个源；
-- `opkg list sixlinux-hello` 显示最新 1.1；
-- `opkg install sixlinux-hello=1.0-r0` 安装 1.0，运行输出 `SixLinux hello v1.0`；
-- `opkg upgrade sixlinux-hello` 升级到 1.1，运行输出 `SixLinux hello v1.1`；
-- 正常关机并清理 HTTP 服务。
+| 文件 | 说明 |
+| --- | --- |
+| `Image` | Linux 内核 |
+| `sixlinux-0.1.0.ext4` | ext4 根文件系统 |
+| `sixlinux-0.1.0.tar.bz2` | tar.bz2 根文件系统 |
+| `sixlinux-image-minimal.manifest` | 镜像软件包清单 |
+| `qemu_fw.rom` | TF-A 固件 ROM |
+| `virt.dtb` | 修正后的 QEMU 设备树 |
+| `SHA256SUMS` | 所有镜像产物的校验和 |
+| `release-info.env` | 版本与上游提交信息 |
+| `RELEASE_NOTES.md` | 发布说明和安全策略 |
+
+`make release-test` 启动 release 镜像并检查：
+
+- `dev` 用户可以用 `artifacts/keys/sixlinux-dev-key` 公钥登录；
+- `dev` 用户可 `sudo -n` 执行 root 操作；
+- `sshd -T` 包含 `permitrootlogin no`、`passwordauthentication no`、`pubkeyauthentication yes`、`allowusers dev`；
+- root 账号 SSH 登录被拒绝，密码认证被拒绝；
+- systemd 运行正常，`sudo poweroff` 正常关机。
+
+手动体验 release 镜像：
+
+```bash
+bash scripts/run-release.sh
+ssh -i artifacts/keys/sixlinux-dev-key \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -p 2222 dev@127.0.0.1
+```
 
 ## 当前文件
 
 - `sources/versions.env`：固定 Poky、Linux、U-Boot 和 TF-A 版本；
-- `layers/meta-sixlinux/conf/`：layer、machine、distro 和构建模板；
+- `layers/meta-sixlinux/conf/`：layer、machine、distro 和 dev/release 两套构建模板；
 - `layers/meta-sixlinux/recipes-bsp/u-boot/`：固化自动 bootcmd 的 U-Boot 配置片段；
 - `layers/meta-sixlinux/recipes-kernel/sixlinux-rtc-driver/`：PL031 platform driver 源码和 recipe；
-- `layers/meta-sixlinux/recipes-apps/sixlinux-hello/`：hello 软件包 recipe（构建仓库时由脚本在 1.0/1.1 之间切换）；
+- `layers/meta-sixlinux/recipes-apps/sixlinux-hello/`：hello 软件包 recipe；
 - `layers/meta-sixlinux/recipes-core/sixlinux-opkg-config/`：目标系统 opkg feed 配置；
+- `layers/meta-sixlinux/recipes-core/sixlinux-security/`：release SSH 用户、密钥和 sudo 配置；
 - `layers/meta-sixlinux/recipes-core/images/`：最小镜像 recipe；
 - `packages/sixlinux-hello/v1.0`、`v1.1`：两个版本的软件包源码；
-- `scripts/`：源码获取、镜像构建、固件构建、仓库构建和启动脚本；
-- `tests/`：直接启动、固件启动、RTC 驱动和 opkg 仓库的自动验证脚本。
+- `scripts/`：源码获取、镜像/固件/仓库/release 构建、密钥生成和启动脚本；
+- `tests/`：直接启动、固件启动、RTC 驱动、opkg 仓库和 release 安全的自动验证脚本。
 
 详细路线见 `docs/roadmap.md`。

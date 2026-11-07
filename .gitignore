@@ -3,7 +3,11 @@
 /artifacts/
 /sources/poky/
 /sources/arm-trusted-firmware/
+
+# 构建时由 scripts/generate-keys.sh 生成的安全密钥材料，不提交到仓库。
 /layers/meta-sixlinux/recipes-core/sixlinux-security/files/ssh_host_ed25519_key
+/layers/meta-sixlinux/recipes-core/sixlinux-security/files/ssh_host_ed25519_key.pub
+/layers/meta-sixlinux/recipes-core/sixlinux-security/files/authorized_keys
 
 *.img
 *.wic

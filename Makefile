@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help check-env fetch-poky build firmware package-repo run run-direct boot-test boot-test-direct driver-test opkg-test
+.PHONY: help check-env fetch-poky build firmware package-repo run run-direct boot-test boot-test-direct driver-test opkg-test release release-test
 
 help:
 	@printf '%s\n' \
@@ -16,7 +16,9 @@ help:
 	  '  make boot-test        Verify the TF-A/U-Boot/Linux boot chain' \
 	  '  make boot-test-direct Verify direct kernel boot' \
 	  '  make driver-test      Verify RTC MMIO, IRQ and debugfs' \
-	  '  make opkg-test        Verify opkg install and upgrade over HTTP'
+	  '  make opkg-test        Verify opkg install and upgrade over HTTP' \
+	  '  make release          Build and package the secure release image' \
+	  '  make release-test     Verify release SSH security and poweroff'
 
 check-env:
 	@bash scripts/check-env.sh
@@ -52,3 +54,9 @@ driver-test:
 
 opkg-test:
 	@python3 tests/opkg-repo.py
+
+release:
+	@bash scripts/release-sixlinux.sh
+
+release-test:
+	@python3 tests/release-security.py

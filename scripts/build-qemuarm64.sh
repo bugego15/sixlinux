@@ -12,6 +12,9 @@ if (( EUID == 0 )); then
     exit 1
 fi
 
+# 密码登录被禁用，构建前必须准备好 release 登录密钥和 SSH 主机密钥。
+bash "$ROOT_DIR/scripts/generate-keys.sh"
+
 if [[ ! -f "$POKY_DIR/oe-init-build-env" ]]; then
     printf '错误：Poky 尚未下载到 %s。\n' "$POKY_DIR" >&2
     exit 1

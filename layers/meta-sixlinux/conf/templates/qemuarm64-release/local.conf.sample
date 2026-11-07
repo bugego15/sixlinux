@@ -1,0 +1,32 @@
+CONF_VERSION = "2"
+
+MACHINE = "sixlinux-qemuarm64"
+DISTRO = "sixlinux"
+PACKAGE_CLASSES = "package_ipk"
+
+DL_DIR = "${TOPDIR}/../../cache/downloads"
+SSTATE_DIR = "${TOPDIR}/../../cache/sstate-cache"
+TMPDIR = "${TOPDIR}/tmp"
+
+BB_NUMBER_THREADS = "8"
+PARALLEL_MAKE = "-j8"
+
+# 优先使用 Yocto 官方源码镜像，失败时仍保留原始 URL 和默认 MIRRORS 回退。
+PREMIRRORS = " \
+    git://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    gitsm://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    https?://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    ftp://.*/.* https://downloads.yoctoproject.org/mirror/sources/ \n \
+    "
+
+# linux-yocto 全历史镜像包超过 4 GB，单独改用官方 Git。
+BB_GIT_SHALLOW:pn-linux-yocto = "1"
+PREMIRRORS:pn-linux-yocto = ""
+
+# 发布配置：不包含 debug-tweaks，root 密码由上游 zap_empty_root_password 锁定。
+EXTRA_IMAGE_FEATURES = ""
+
+# 与上游 qemuarm64 一致，由 QEMU 直接加载 ext4 根文件系统。
+IMAGE_FSTYPES = "tar.bz2 ext4"
+
+INHERIT += "buildstats"
