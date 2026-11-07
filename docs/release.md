@@ -63,8 +63,27 @@ artifacts/releases/sixlinux-0.1.0/
 
 测试日志：`artifacts/release-security.log`。
 
+## 软件源签名
+
+release 镜像与开发镜像共用同一套签名软件源配置：
+
+- `/etc/opkg/sixlinux.conf` 中包含 `option check_signature 1` 和 `option signature_type gpg-asc`；
+- 镜像内置 `/etc/opkg/gpg/` 公钥 keyring，拒绝未签名或被篡改的索引；
+- 源地址由 `SIXLINUX_FEED_BASE` 决定，release 模板可以在 `local.conf` 中覆盖为正式服务器地址。
+
+发布流程：
+
+```bash
+make build
+make release
+make package-repo
+make publish-feed     # 输出到 artifacts/feed/published，可复制到正式服务器
+```
+
+对外托管时必须同时提供 `Packages.gz` 和 `Packages.asc`；密钥与签名规则见 `docs/signed-feed.md`。
+
 ## CI
 
-`scripts/ci.sh` 串联环境检查、源码获取、镜像/固件/仓库构建、启动测试、RTC 驱动测试、opkg 测试和 release 安全测试。
+`scripts/ci.sh` 串联环境检查、源码获取、镜像/固件/仓库构建、启动测试、RTC 驱动测试、板级测试、opkg 签名源测试和 release 安全测试。
 
 GitHub Actions 使用 Ubuntu 24.04，缓存 `cache/downloads` 和 `cache/sstate-cache`，并上传 `artifacts/releases/`。首次 CI 构建耗时较长，后续可复用缓存。

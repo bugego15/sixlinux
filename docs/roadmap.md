@@ -50,3 +50,12 @@
 - 加入本地 CI 和 GitHub Actions；
 - 完善架构、构建报告、故障排查和发布说明；
 - 执行完整 `make ci`。
+
+## 阶段 9：自有签名软件源
+
+- 生成 feed 签名密钥，对 opkg 索引生成 `Packages.asc`；
+- 目标端 `check_signature 1` + 内置公钥 keyring，强制验签；
+- `SIXLINUX_FEED_BASE` 配置源地址，支持本机、局域网和公网 HTTPS；
+- 提供 `make publish-feed` 发布签名 feed；
+- 执行 `make opkg-test` 和完整 `make ci`。
+

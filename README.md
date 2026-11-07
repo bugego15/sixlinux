@@ -11,6 +11,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 - PL031 RTC platform driver：设备树绑定、MMIO、IRQ、debugfs，并注册标准 `/dev/rtc0`；
 - 板级验证套件：在目标系统内运行 CPU、SMP、内存、中断、RTC、块设备、网络和 systemd 共 8 项检查；
 - opkg 在线软件仓库：hello 1.0/1.1 安装与升级；
+- 自有签名软件源：GPG 签名的 opkg feed，源地址可通过 `SIXLINUX_FEED_BASE` 指向本机、局域网或公网 HTTPS；
 - release 安全登录：无 debug-tweaks、root/密码禁用、dev 用户 ed25519 公钥 + sudo；
 - 本地 CI 和 GitHub Actions 流水线。
 
@@ -27,6 +28,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 | P6 | release 安全登录与发布打包 | `d7fb933`、`81434d9` |
 | P7 | 本地 CI、GitHub Actions 与文档 | `951dbcc`、`d9b40b5`、`115a5ed`、`31ae6a0`、`24a9dad` |
 | P8 | 板级验证套件与标准 rtc0 设备 | `eb7aba7`、`a78aac6` |
+| P9 | 自有 GPG 签名软件源 | 本阶段提交 |
 
 每个阶段都有对应的验证记录：`docs/p*-validation.md`。
 
@@ -66,10 +68,11 @@ wsl -d Ubuntu-24.04
 cd /home/dev/sixlinux
 make check-env
 make fetch-poky
-make build          # 自动生成 SSH 密钥并构建开发镜像
+make build          # 自动生成 SSH 密钥和软件源签名密钥并构建镜像
 make firmware       # 构建 TF-A、U-Boot 和修正后的 DTB
 make boot-test      # 零输入验证完整启动链
 make board-test     # 在目标系统里运行 8 项板级验证
+make package-repo   # 生成签名 opkg feed（Packages + Packages.asc）
 ```
 
 一条命令执行完整流水线（环境检查、构建、启动、驱动、仓库、release 和安全测试）：
@@ -87,7 +90,8 @@ make ci
 | `make fetch-poky` | 获取固定版本的 Poky、内核、U-Boot 和 TF-A 源码 |
 | `make build` | 构建开发镜像 |
 | `make firmware` | 构建 TF-A/U-Boot 固件和 QEMU DTB |
-| `make package-repo` | 构建 hello 1.0/1.1 和 opkg feed |
+| `make package-repo` | 构建 hello 1.0/1.1，重建并签名 opkg feed |
+| `make publish-feed` | 把签名 feed 复制到可发布目录（`FEED_PUBLISH_DIR` 可覆盖） |
 | `make run` | 交互式启动完整固件链 |
 | `make run-direct` | 直接内核启动（调试回退路径） |
 | `make boot-test` | 自动验证 TF-A → U-Boot → Linux |
@@ -112,10 +116,11 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 | --- | --- |
 | `build/qemuarm64/tmp/deploy/images/sixlinux-qemuarm64/` | 开发镜像、内核、模块、manifest |
 | `build/qemuarm64-release/tmp/deploy/images/sixlinux-qemuarm64/` | release 镜像产物 |
-| `build/qemuarm64/tmp/deploy/ipk/` | opkg feed |
+| `build/qemuarm64/tmp/deploy/ipk/` | 签名 opkg feed（Packages、Packages.gz、Packages.asc、ipk） |
+| `artifacts/feed/published/` | `make publish-feed` 生成的待托管目录 |
 | `artifacts/releases/sixlinux-0.1.0/` | 发布包（Image、ext4、tar.bz2、ROM、DTB、SHA256SUMS） |
 | `artifacts/board-test.json`、`artifacts/board-test.log` | 板级验证套件的汇总结果和详细日志 |
-| `artifacts/keys/` | 本地 SSH 密钥（不提交） |
+| `artifacts/keys/` | 本地 SSH 密钥和软件源签名私钥（不提交） |
 | `artifacts/*.log` | 各测试串口和运行日志 |
 
 ## 文档
@@ -126,16 +131,18 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - `docs/rtc-driver.md`：RTC platform driver 设计与验证；
 - `docs/board-test.md`：板级验证套件的设计和运行方式；
 - `docs/opkg-repository.md`：opkg feed 架构和测试；
+- `docs/signed-feed.md`：自有签名软件源的密钥、签名规则和发布流程；
 - `docs/release.md`：release 构建与安全配置；
 - `docs/bring-up-notes.md`：构建和调试故障排查记录；
 - `docs/roadmap.md`：分阶段复现路线；
-- `docs/p1-validation.md` … `docs/p8-validation.md`：各阶段验证记录。
+- `docs/p1-validation.md` … `docs/p9-validation.md`：各阶段验证记录。
 
 ## 安全说明
 
 - 开发镜像保留 `debug-tweaks`，仅用于本地 QEMU 调试；
 - release 镜像锁定 root，禁用密码/键盘交互认证，只允许 `dev` 用户公钥登录；
-- SSH 私钥只保存在本地 `artifacts/keys/`，不进入仓库；
+- SSH 私钥和软件源签名私钥只保存在本地 `artifacts/keys/`，仓库与镜像只含公钥；
+- opkg 强制校验软件源索引的 GPG 签名，篡改索引会被拒绝；
 - QEMU 用户网络只在本机转发 2222 端口，不暴露到外部网络。
 
 ## CI

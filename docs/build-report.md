@@ -16,11 +16,11 @@
 
 首次从零构建：3123 个 BitBake 任务全部成功。
 
-加入 U-Boot、RTC 模块、opkg、release 安全配置和板级验证套件后的最终镜像：3296 个任务全部成功，其中 3269 个命中 sstate，实际执行 27 个。
+加入 U-Boot、RTC 模块、opkg、release 安全配置、板级验证套件和 GPG 签名软件源后的最终镜像：3547 个任务全部成功，其中 3256 个命中 sstate，实际执行 291 个（含 opkg 的 GPG/HTTPS 能力重建）。
 
 ### 发布镜像（`build/qemuarm64-release`）
 
-独立构建目录和 release 模板：3296 个任务全部成功，其中 3232 个命中 sstate，实际执行 64 个，约 4 分钟完成。
+独立构建目录和 release 模板：3547 个任务全部成功，其中 3518 个命中 sstate，实际执行 29 个，约 4 分钟完成。
 
 ### 产物大小
 
@@ -63,7 +63,9 @@ RTC 驱动（`make driver-test`）：
 opkg 仓库（`make opkg-test`）：
 
 - HTTP feed 三个源可访问；
-- 安装 `sixlinux-hello=1.0-r0` 输出 v1.0，升级后输出 v1.1。
+- 安装 `sixlinux-hello=1.0-r0` 输出 v1.0，升级后输出 v1.1；
+- 索引带 GPG 签名（`Packages.asc`），目标端强制验签；
+- 篡改签名后 `opkg update` 报 `Signature verification failed`，恢复签名后重新可用。
 
 release 安全（`make release-test`）：
 

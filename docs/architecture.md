@@ -14,7 +14,8 @@
 | 用户空间 | glibc、systemd、OpenSSH |
 | 构建系统 | Poky 5.0.21 + 自定义 layer/DISTRO/image |
 | 构建配置 | 开发模板 `qemuarm64`、发布模板 `qemuarm64-release` |
-| 包格式 | ipk，支持本地 HTTP opkg feed |
+| 包格式 | ipk，支持本地或远程 opkg feed |
+| 软件源安全 | GPG 签名索引（`Packages.asc`），目标端强制验签，地址由 `SIXLINUX_FEED_BASE` 配置 |
 | 登录策略 | `dev` 用户 + ed25519 公钥，root 和密码登录禁用 |
 | 根文件系统 | ext4，另有 tar.bz2 |
 
