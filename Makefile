@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help check-env fetch-poky build firmware run run-direct boot-test boot-test-direct driver-test
+.PHONY: help check-env fetch-poky build firmware package-repo run run-direct boot-test boot-test-direct driver-test opkg-test
 
 help:
 	@printf '%s\n' \
@@ -10,11 +10,13 @@ help:
 	  '  make fetch-poky       Fetch pinned Poky, kernel and firmware repositories' \
 	  '  make build            Build the minimal SixLinux AArch64 image' \
 	  '  make firmware         Build TF-A, U-Boot and the QEMU device tree' \
+	  '  make package-repo     Build hello 1.0/1.1 and the opkg feed' \
 	  '  make run              Boot through TF-A and U-Boot interactively' \
 	  '  make run-direct       Boot directly with a kernel and rootfs' \
 	  '  make boot-test        Verify the TF-A/U-Boot/Linux boot chain' \
 	  '  make boot-test-direct Verify direct kernel boot' \
-	  '  make driver-test      Verify RTC MMIO, IRQ and debugfs'
+	  '  make driver-test      Verify RTC MMIO, IRQ and debugfs' \
+	  '  make opkg-test        Verify opkg install and upgrade over HTTP'
 
 check-env:
 	@bash scripts/check-env.sh
@@ -30,6 +32,9 @@ build:
 firmware:
 	@bash scripts/build-firmware.sh
 
+package-repo:
+	@bash scripts/build-package-repo.sh
+
 run:
 	@bash scripts/run-firmware.sh
 
@@ -44,3 +49,6 @@ boot-test-direct:
 
 driver-test:
 	@python3 tests/driver-rtc.py
+
+opkg-test:
+	@python3 tests/opkg-repo.py

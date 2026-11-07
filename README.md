@@ -4,18 +4,18 @@
 
 ## 当前阶段
 
-**阶段 4（P4）：PL031 RTC platform driver。**
+**阶段 5（P5）：opkg 在线软件仓库。**
 
-本阶段在不修改 QEMU 的前提下，把 QEMU 自带的 PL031 RTC 从 AMBA primecell 绑定改为 platform device，并新增一个 out-of-tree 内核模块完成设备树匹配、MMIO 访问、IRQ 处理和 debugfs 观测。
+本阶段把镜像升级为可安装软件包的系统：使用 `package_ipk` 生成软件包，在 WSL 中通过 HTTP 提供 feed，目标系统用 opkg 完成 `update`、指定版本安装和在线升级。
 
 具体改动：
 
-- `scripts/build-firmware.sh` 把 `/pl031@9010000` 的 `compatible` 改为单一的 `arm,pl031`，避免进入 AMBA 总线；
-- `layers/meta-sixlinux/recipes-kernel/sixlinux-rtc-driver/` 提供模块源码和 recipe；
-- 模块注册 platform driver，映射 MMIO、申请设备树 IRQ、读取 AMBA ID 和 RTC Data Register，并通过 `/sys/kernel/debug/sixlinux_rtc/` 暴露 `id`、`data`、`irq_count`、`trigger`；
-- 镜像安装 `kernel-module-sixlinux-rtc` 并自动加载。
+- 新增 `sixlinux-hello` 的 1.0 和 1.1 两套 recipe 与源码，`scripts/build-package-repo.sh` 依次构建两个版本，再用 `opkg-make-index -a` 生成保留多版本的 feed；
+- 新增 `sixlinux-opkg-config`，把 `all`、`cortexa53`、`sixlinux_qemuarm64` 三个源写入 `/etc/opkg/sixlinux.conf`，地址指向 QEMU slirp 网关 `10.0.2.2:8080`；
+- 镜像启用 `package-management` 并安装仓库配置；
+- `tests/opkg-repo.py` 自动启动 HTTP 服务、登录系统并验证安装与升级。
 
-后续阶段再加入 opkg 软件仓库和 release 安全登录。
+后续阶段再加入 release 安全登录和 CI。
 
 ## 开发环境
 
@@ -46,19 +46,19 @@ make build
 make firmware
 make boot-test
 make driver-test
+make package-repo
+make opkg-test
 ```
 
-`make firmware` 构建 U-Boot、TF-A，导出 QEMU 设备树并修正 PSCI、GPIO 和 RTC 节点。
+`make package-repo` 构建 hello 1.0/1.1 并生成 `build/qemuarm64/tmp/deploy/ipk` 下的软件仓库索引。
 
-`make boot-test` 零输入验证 TF-A → U-Boot → Linux 自动启动链。
+`make opkg-test` 启动本地 HTTP feed 和 SixLinux，检查：
 
-`make driver-test` 启动系统并检查 RTC 驱动：
-
-- `modprobe sixlinux_rtc` 成功，`dmesg` 包含 `SixLinux RTC probed`；
-- debugfs 读出的 AMBA ID 为 `0x00141031`（按 `0x000fffff` 掩码比较）；
-- probe 时设置的 alarm 产生第一次中断，`irq_count ≥ 1`；
-- 向 `trigger` 写入后产生第二次中断，计数增加；
-- `poweroff` 正常关机。
+- `opkg update` 成功读取三个源；
+- `opkg list sixlinux-hello` 显示最新 1.1；
+- `opkg install sixlinux-hello=1.0-r0` 安装 1.0，运行输出 `SixLinux hello v1.0`；
+- `opkg upgrade sixlinux-hello` 升级到 1.1，运行输出 `SixLinux hello v1.1`；
+- 正常关机并清理 HTTP 服务。
 
 ## 当前文件
 
@@ -66,10 +66,11 @@ make driver-test
 - `layers/meta-sixlinux/conf/`：layer、machine、distro 和构建模板；
 - `layers/meta-sixlinux/recipes-bsp/u-boot/`：固化自动 bootcmd 的 U-Boot 配置片段；
 - `layers/meta-sixlinux/recipes-kernel/sixlinux-rtc-driver/`：PL031 platform driver 源码和 recipe；
+- `layers/meta-sixlinux/recipes-apps/sixlinux-hello/`：hello 软件包 recipe（构建仓库时由脚本在 1.0/1.1 之间切换）；
+- `layers/meta-sixlinux/recipes-core/sixlinux-opkg-config/`：目标系统 opkg feed 配置；
 - `layers/meta-sixlinux/recipes-core/images/`：最小镜像 recipe；
-- `scripts/`：源码获取、镜像构建、固件构建和启动脚本；
-- `tests/boot-qemuarm64.py`：直接内核启动自动验证；
-- `tests/boot-firmware.py`：TF-A/U-Boot 零输入自动启动验证；
-- `tests/driver-rtc.py`：RTC MMIO/IRQ/debugfs 验证。
+- `packages/sixlinux-hello/v1.0`、`v1.1`：两个版本的软件包源码；
+- `scripts/`：源码获取、镜像构建、固件构建、仓库构建和启动脚本；
+- `tests/`：直接启动、固件启动、RTC 驱动和 opkg 仓库的自动验证脚本。
 
 详细路线见 `docs/roadmap.md`。

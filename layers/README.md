@@ -8,8 +8,12 @@
 - `conf/templates/qemuarm64/`：可复现的构建目录模板；
 - `recipes-bsp/u-boot/`：U-Boot 配置片段，固化自动 `CONFIG_BOOTCOMMAND`；
 - `recipes-kernel/sixlinux-rtc-driver/`：PL031 RTC platform driver 模块源码与 recipe；
-- `recipes-core/images/sixlinux-image-minimal.bb`：带 OpenSSH 和 RTC 模块的最小镜像。
+- `recipes-apps/sixlinux-hello/`：hello 软件包 recipe；
+- `recipes-core/sixlinux-opkg-config/`：目标系统的 opkg feed 配置；
+- `recipes-core/images/sixlinux-image-minimal.bb`：带 OpenSSH、RTC 模块和 opkg 配置的最小镜像。
 
 TF-A 不进入 Yocto 构建，由 `scripts/build-firmware.sh` 以 Yocto 部署的 U-Boot 作为 BL33 单独编译。
 
-后续阶段再逐步加入 opkg 配置和安全 release 配置。
+`recipes-apps/sixlinux-hello/` 在仓库中保存 1.1 版本的 recipe；`scripts/build-package-repo.sh` 会轮流放入 1.0/1.1 源码进行构建。
+
+后续阶段再加入安全 release 配置。
