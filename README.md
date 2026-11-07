@@ -4,11 +4,13 @@
 
 ## 当前阶段
 
-**阶段 1（P1）：Poky 最小 AArch64 镜像。**
+**阶段 2（P2）：TF-A + U-Boot 启动链。**
 
-本阶段建立固定版本的 Poky 构建环境、自定义 layer、machine、distro 和最小 image，并用直接内核启动方式验证系统。
+本阶段在最小镜像的基础上加入 TF-A BL1/BL2/BL31 和 U-Boot BL33，构建 QEMU 固件 ROM，并在 `secure=on`、GICv3 平台下由 TF-A 把控制权交给 U-Boot，再由 U-Boot 启动 Linux。
 
-后续阶段再加入 TF-A/U-Boot、驱动、软件仓库和 release 安全登录。
+本阶段仍由人工（或测试脚本）在 U-Boot 中输入 `booti`，自动 bootcmd 留到下一阶段。
+
+后续阶段再加入自动启动、驱动、软件仓库和 release 安全登录。
 
 ## 开发环境
 
@@ -36,17 +38,29 @@ cd /home/dev/sixlinux
 make check-env
 make fetch-poky
 make build
-make boot-test-direct
+make firmware
+make boot-test
 ```
 
-`boot-test-direct` 会启动实际镜像，检查 AArch64、2 个 vCPU、SixLinux 标识和 systemd 状态，并正常关机。
+`make firmware` 会构建 U-Boot 和 TF-A，导出 QEMU 设备树并修正 PSCI 与 GPIO 节点。
+
+`make boot-test` 启动完整固件链，等待 U-Boot 命令行，依次输入 `setenv bootargs ...` 和 `booti 0x40200000 - 0x44000000`，然后检查：
+
+- 串口日志包含 TF-A BL1/BL31 和 U-Boot 2024.01；
+- 手工输入的 `setenv` 和 `booti` 出现在日志中；
+- Linux 启动成功，`uname -m = aarch64`、`nproc = 2`；
+- `/etc/os-release` 包含 SixLinux，`systemctl is-system-running = running`；
+- `poweroff` 正常关机。
+
+人工体验完整启动链时执行 `make run`，按屏幕提示在 U-Boot 中手工输入同样的两条命令。
 
 ## 当前文件
 
-- `sources/versions.env`：固定 Poky 和 Linux 版本；
+- `sources/versions.env`：固定 Poky、Linux、U-Boot 和 TF-A 版本；
 - `layers/meta-sixlinux/conf/`：layer、machine、distro 和构建模板；
 - `layers/meta-sixlinux/recipes-core/images/`：最小镜像 recipe；
-- `scripts/`：源码获取、构建和直接启动脚本；
-- `tests/boot-qemuarm64.py`：直接启动自动验证。
+- `scripts/`：源码获取、镜像构建、固件构建和启动脚本；
+- `tests/boot-qemuarm64.py`：直接内核启动自动验证；
+- `tests/boot-firmware.py`：TF-A/U-Boot 手动启动链自动验证。
 
 详细路线见 `docs/roadmap.md`。

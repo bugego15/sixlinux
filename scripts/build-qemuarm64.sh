@@ -25,8 +25,9 @@ if [[ "$actual_commit" != "$POKY_COMMIT" ]]; then
     exit 1
 fi
 
-"$ROOT_DIR/scripts/fetch-kernel-cache.sh"
+bash "$ROOT_DIR/scripts/fetch-kernel-cache.sh"
 
+mkdir -p "$BUILD_DIR"
 export TEMPLATECONF
 set +u
 # shellcheck disable=SC1091
