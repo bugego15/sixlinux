@@ -2,22 +2,42 @@
 
 面向 AArch64 的嵌入式 Linux 发行版与板级启动验证平台。
 
-## 当前阶段
+SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boot、Linux、systemd、OpenSSH、opkg）从零构建的可复现实验平台，用来练习板级 bring-up、固件启动链、设备树、平台驱动、软件仓库、发布安全和 CI。
 
-**阶段 6（P6）：release 安全登录。**
+## 能力概览
 
-本阶段在开发镜像之外增加独立的发布构建：去掉 `debug-tweaks`，锁定 root，只允许 `dev` 用户通过 ed25519 公钥登录，并用 sudo 执行管理操作。
+- TF-A BL1/BL2/BL31 + U-Boot BL33 的完整固件启动链，`secure=on`、GICv3、PSCI 走 SMC；
+- 零输入自动启动：`CONFIG_BOOTCOMMAND` 固化 `setenv bootargs` + `booti`；
+- PL031 RTC platform driver：设备树绑定、MMIO、IRQ、debugfs；
+- opkg 在线软件仓库：hello 1.0/1.1 安装与升级；
+- release 安全登录：无 debug-tweaks、root/密码禁用、dev 用户 ed25519 公钥 + sudo；
+- 本地 CI 和 GitHub Actions 流水线。
 
-具体改动：
+## 阶段与提交
 
-- 新增 release 构建模板 `conf/templates/qemuarm64-release/`，`EXTRA_IMAGE_FEATURES = ""`；
-- 新增 `sixlinux-security`：创建 `dev` 用户（空密码字段）、`sudo` 免密、sshd drop-in 配置（禁止 root 和密码登录、只允许 dev 公钥）、预装 ed25519 主机密钥和授权公钥；
-- `scripts/generate-keys.sh` 在构建前生成 dev 登录密钥和 SSH 主机密钥，私钥只保存在 `artifacts/keys/`，layer 中只保留构建期副本且不提交；
-- `scripts/build-release.sh` 使用 release 模板构建到 `build/qemuarm64-release`；
-- `scripts/release-sixlinux.sh` 打包镜像、TF-A ROM、DTB、manifest 和 `SHA256SUMS` 到 `artifacts/releases/sixlinux-0.1.0/`；
-- `tests/release-security.py` 通过 SSH 验证公钥登录、sudo、root/密码拒绝和 sshd 配置。
+| 阶段 | 内容 | 提交 |
+| --- | --- | --- |
+| P0 | 开发环境与项目骨架 | `a6084f2` |
+| P1 | Poky 最小 AArch64 镜像 | `a821406`、`2adcbb7` |
+| P2 | TF-A + U-Boot 手动启动链 | `8bb05c0`、`788dbfd` |
+| P3 | U-Boot 自动启动 | `978d7c6`、`e04837b` |
+| P4 | PL031 RTC platform driver | `c57d8ba`、`a2988f7` |
+| P5 | opkg 在线软件仓库 | `3846a02`、`16a3305` |
+| P6 | release 安全登录与发布打包 | `d7fb933`、`81434d9` |
+| P7 | 本地 CI、GitHub Actions 与文档 | 本阶段提交 |
 
-后续阶段再加入本地 CI 和 GitHub Actions。
+每个阶段都有对应的验证记录：`docs/p*-validation.md`。
+
+## 默认启动链
+
+```text
+TF-A BL1
+  → TF-A BL2
+  → TF-A BL31（GICv3、PSCI、运行时服务）
+  → U-Boot BL33 @ 0x60000000
+  → Linux Image @ 0x40200000 + DTB @ 0x44000000
+  → SixLinux ext4 / systemd
+```
 
 ## 开发环境
 
@@ -34,7 +54,7 @@ Windows
 - 不在 `/mnt/e` 下执行 Yocto 大型构建；
 - 不使用 root 运行 BitBake。
 
-## 构建和验证
+## 快速开始
 
 ```powershell
 wsl -d Ubuntu-24.04
@@ -44,61 +64,77 @@ wsl -d Ubuntu-24.04
 cd /home/dev/sixlinux
 make check-env
 make fetch-poky
-make build
-make firmware
-make boot-test
-make driver-test
-make package-repo
-make opkg-test
-make release
-make release-test
+make build          # 自动生成 SSH 密钥并构建开发镜像
+make firmware       # 构建 TF-A、U-Boot 和修正后的 DTB
+make boot-test      # 零输入验证完整启动链
 ```
 
-`make build` 前会自动调用 `scripts/generate-keys.sh` 生成 SSH 密钥；私钥只存在于 `artifacts/keys/`，不要提交。
-
-`make release` 使用独立构建目录和 release 模板，产出 `artifacts/releases/sixlinux-0.1.0/`：
-
-| 文件 | 说明 |
-| --- | --- |
-| `Image` | Linux 内核 |
-| `sixlinux-0.1.0.ext4` | ext4 根文件系统 |
-| `sixlinux-0.1.0.tar.bz2` | tar.bz2 根文件系统 |
-| `sixlinux-image-minimal.manifest` | 镜像软件包清单 |
-| `qemu_fw.rom` | TF-A 固件 ROM |
-| `virt.dtb` | 修正后的 QEMU 设备树 |
-| `SHA256SUMS` | 所有镜像产物的校验和 |
-| `release-info.env` | 版本与上游提交信息 |
-| `RELEASE_NOTES.md` | 发布说明和安全策略 |
-
-`make release-test` 启动 release 镜像并检查：
-
-- `dev` 用户可以用 `artifacts/keys/sixlinux-dev-key` 公钥登录；
-- `dev` 用户可 `sudo -n` 执行 root 操作；
-- `sshd -T` 包含 `permitrootlogin no`、`passwordauthentication no`、`pubkeyauthentication yes`、`allowusers dev`；
-- root 账号 SSH 登录被拒绝，密码认证被拒绝；
-- systemd 运行正常，`sudo poweroff` 正常关机。
-
-手动体验 release 镜像：
+一条命令执行完整流水线（环境检查、构建、启动、驱动、仓库、release 和安全测试）：
 
 ```bash
-bash scripts/run-release.sh
+make ci
+```
+
+## 常用命令
+
+| 命令 | 说明 |
+| --- | --- |
+| `make check-env` | 主机工具和项目环境检查 |
+| `make smoke-qemu` | 创建并退出最小 Cortex-A53 QEMU 实例 |
+| `make fetch-poky` | 获取固定版本的 Poky、内核、U-Boot 和 TF-A 源码 |
+| `make build` | 构建开发镜像 |
+| `make firmware` | 构建 TF-A/U-Boot 固件和 QEMU DTB |
+| `make package-repo` | 构建 hello 1.0/1.1 和 opkg feed |
+| `make run` | 交互式启动完整固件链 |
+| `make run-direct` | 直接内核启动（调试回退路径） |
+| `make boot-test` | 自动验证 TF-A → U-Boot → Linux |
+| `make driver-test` | 验证 RTC MMIO/IRQ/debugfs |
+| `make opkg-test` | 验证 opkg 安装和升级 |
+| `make release` | 构建并打包 release 镜像 |
+| `make release-test` | 验证 release SSH 安全策略 |
+| `make ci` | 执行完整本地 CI |
+
+启动 QEMU 后可以 SSH 登录（仅 `dev` 用户、仅公钥）：
+
+```bash
 ssh -i artifacts/keys/sixlinux-dev-key \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -p 2222 dev@127.0.0.1
 ```
 
-## 当前文件
+## 产物
 
-- `sources/versions.env`：固定 Poky、Linux、U-Boot 和 TF-A 版本；
-- `layers/meta-sixlinux/conf/`：layer、machine、distro 和 dev/release 两套构建模板；
-- `layers/meta-sixlinux/recipes-bsp/u-boot/`：固化自动 bootcmd 的 U-Boot 配置片段；
-- `layers/meta-sixlinux/recipes-kernel/sixlinux-rtc-driver/`：PL031 platform driver 源码和 recipe；
-- `layers/meta-sixlinux/recipes-apps/sixlinux-hello/`：hello 软件包 recipe；
-- `layers/meta-sixlinux/recipes-core/sixlinux-opkg-config/`：目标系统 opkg feed 配置；
-- `layers/meta-sixlinux/recipes-core/sixlinux-security/`：release SSH 用户、密钥和 sudo 配置；
-- `layers/meta-sixlinux/recipes-core/images/`：最小镜像 recipe；
-- `packages/sixlinux-hello/v1.0`、`v1.1`：两个版本的软件包源码；
-- `scripts/`：源码获取、镜像/固件/仓库/release 构建、密钥生成和启动脚本；
-- `tests/`：直接启动、固件启动、RTC 驱动、opkg 仓库和 release 安全的自动验证脚本。
+| 路径 | 内容 |
+| --- | --- |
+| `build/qemuarm64/tmp/deploy/images/sixlinux-qemuarm64/` | 开发镜像、内核、模块、manifest |
+| `build/qemuarm64-release/tmp/deploy/images/sixlinux-qemuarm64/` | release 镜像产物 |
+| `build/qemuarm64/tmp/deploy/ipk/` | opkg feed |
+| `artifacts/releases/sixlinux-0.1.0/` | 发布包（Image、ext4、tar.bz2、ROM、DTB、SHA256SUMS） |
+| `artifacts/keys/` | 本地 SSH 密钥（不提交） |
+| `artifacts/*.log` | 各测试串口和运行日志 |
 
-详细路线见 `docs/roadmap.md`。
+## 文档
+
+- `docs/architecture.md`：目标架构、启动链和边界；
+- `docs/build-report.md`：构建结果、产物大小和验证汇总；
+- `docs/firmware-report.md`：TF-A/U-Boot 固件链细节；
+- `docs/rtc-driver.md`：RTC platform driver 设计与验证；
+- `docs/opkg-repository.md`：opkg feed 架构和测试；
+- `docs/release.md`：release 构建与安全配置；
+- `docs/bring-up-notes.md`：构建和调试故障排查记录；
+- `docs/roadmap.md`：分阶段复现路线；
+- `docs/p1-validation.md` … `docs/p7-validation.md`：各阶段验证记录。
+
+## 安全说明
+
+- 开发镜像保留 `debug-tweaks`，仅用于本地 QEMU 调试；
+- release 镜像锁定 root，禁用密码/键盘交互认证，只允许 `dev` 用户公钥登录；
+- SSH 私钥只保存在本地 `artifacts/keys/`，不进入仓库；
+- QEMU 用户网络只在本机转发 2222 端口，不暴露到外部网络。
+
+## CI
+
+- `scripts/ci.sh`：本地完整流水线；
+- `.github/workflows/ci.yml`：GitHub Actions 在 Ubuntu 24.04 上安装 Yocto 依赖，缓存 `cache/downloads` 和 `cache/sstate-cache`，执行 `./scripts/ci.sh` 并上传发布产物。
+
+首次 CI 构建耗时较长，后续可复用缓存加速。
