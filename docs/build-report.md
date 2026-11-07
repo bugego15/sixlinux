@@ -16,7 +16,7 @@
 
 首次从零构建：3123 个 BitBake 任务全部成功。
 
-加入 U-Boot、RTC 模块、opkg、release 安全配置、板级验证套件和 GPG 签名软件源后的最终镜像：3547 个任务全部成功，其中 3256 个命中 sstate，实际执行 291 个（含 opkg 的 GPG/HTTPS 能力重建）。
+加入 U-Boot、RTC 模块、opkg、release 安全配置、板级验证套件、GPG 签名软件源和内核验证扩展后的最终镜像：3547 个任务全部成功，其中 3520 个命中 sstate，实际执行 27 个。
 
 ### 发布镜像（`build/qemuarm64-release`）
 
@@ -49,16 +49,25 @@ RTC 驱动（`make driver-test`）：
 - MMIO 数据可读，alarm 中断计数 `1 → 2`；
 - 注册标准 `/dev/rtc0`，sysfs `name` 为 `sixlinux_rtc`。
 
-板级验证（`make board-test`，在目标系统内运行 `sixlinux-boardtest`）：
+板级验证（`make board-test`，在目标系统内运行 `sixlinux-boardtest`，12 项）：
 
+- `kernel`：内核 6.6.160、cmdline 正常、`dmesg` 无异常、8 个关键内核配置齐全；
 - `cpu`：MIDR `0x410fd034`、页大小 4096、缓存行 64、NEON 与 CRC32 指令实测通过；
 - `smp`：2 个 CPU、4 线程 atomic 计数 4000000、亲和性 CPU1、futex 唤醒约 872us；
 - `mm`：MemTotal 1987MB、64MB mmap、mlock、memcpy 约 1.0TB/s（仿真内存）；
-- `irq`：1ms POSIX timer 共 1481 次信号，平均间隔 1013us、最大 4630us；
+- `irq`：1ms POSIX timer 约 1480 次信号，平均间隔约 1013us、最大约 4.6ms；
 - `rtc`：`/dev/rtc0` ioctl 读时/写时回读、sysfs 与系统时间一致；
-- `blk`：`/dev/vda` ext4 超级块正确，顺序写 78.8MB/s、读 2223MB/s，支持 O_DIRECT；
-- `net`：loopback TCP 501MB/s、UDP 正常、通过 `10.0.2.2:8080` 取回 HTTP 内容、DNS 解析正常；
-- `systemd`：临时服务启停、journald 日志和 `systemd-run` 定时器全部正常。
+- `blk`：`/dev/vda` ext4 超级块正确，顺序写约 79MB/s、读约 2.2GB/s，支持 O_DIRECT；
+- `net`：loopback TCP 约 500MB/s、UDP 正常、通过 `10.0.2.2:8080` 取回 HTTP 内容、DNS 解析正常；
+- `cgroup`：cgroup v2 统一层级、`memory.max=32M` 触发 OOM、pids 控制器可用；
+- `seccomp`：BPF 过滤器拦截 `getppid` 返回 EPERM，`Seccomp: 2`；
+- `systemd`：临时服务启停、journald 日志和 `systemd-run` 定时器全部正常；
+- `ns`：UTS/mount/net/PID namespace 隔离正常，新 PID namespace 内 pid=1。
+
+GPIO（`make gpio-test`，直接启动 secure=off）：
+
+- `/dev/gpiochip0` 存在，`name=gpiochip0 label=9030000.pl061 lines=8`；
+- debugfs GPIO 列表包含 PL061 控制器。
 
 opkg 仓库（`make opkg-test`）：
 
@@ -81,6 +90,7 @@ release 安全（`make release-test`）：
 | `artifacts/qemu-boot.log` | 直接内核启动 |
 | `artifacts/rtc-driver-test.log` | RTC 驱动测试 |
 | `artifacts/board-test.log`、`artifacts/board-test.json` | 板级验证套件结果 |
+| `artifacts/gpio-test.log` | 直接启动 GPIO 验证 |
 | `artifacts/opkg-test.log`、`artifacts/opkg-http.log` | opkg 仓库测试 |
 | `artifacts/release-security.log` | release 安全测试 |
 
@@ -94,6 +104,7 @@ make firmware
 make boot-test
 make driver-test
 make board-test
+make gpio-test
 make package-repo
 make opkg-test
 make release
@@ -101,3 +112,4 @@ make release-test
 ```
 
 或一条命令执行完整流水线：`make ci`。
+

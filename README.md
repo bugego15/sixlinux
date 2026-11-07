@@ -29,7 +29,7 @@ SixLinux 不是 Ubuntu 的裁剪版，而是用上游开源组件（TF-A、U-Boo
 | P7 | 本地 CI、GitHub Actions 与文档 | `951dbcc`、`d9b40b5`、`115a5ed`、`31ae6a0`、`24a9dad` |
 | P8 | 板级验证套件与标准 rtc0 设备 | `eb7aba7`、`a78aac6`、`dc1f43b` |
 | P9 | 自有 GPG 签名软件源 | `f666e6d`、`a2ce75f` |
-| P10 | 板级测试与内核验证扩展 | 本阶段提交 |
+| P10 | 板级测试与内核验证扩展 | `e80d33c` |
 
 每个阶段都有对应的验证记录：`docs/p*-validation.md`。
 
@@ -154,4 +154,5 @@ ssh -i artifacts/keys/sixlinux-dev-key \
 - `.github/workflows/ci.yml`：GitHub Actions 在 Ubuntu 24.04 上安装 Yocto 依赖，缓存 `cache/downloads` 和 `cache/sstate-cache`，执行 `./scripts/ci.sh` 并上传发布产物。
 
 首次 CI 构建耗时较长，后续可复用缓存加速。
+
 

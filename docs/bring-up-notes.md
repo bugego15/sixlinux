@@ -36,5 +36,8 @@
 | WSL 后台 `nohup` 启动的 QEMU 随会话退出 | WSL 实例在最后一个前台进程结束后回收 | 用持续运行的前台命令或工具后台任务托管 QEMU |
 | GitHub Actions 上 BitBake 立即失败 | Ubuntu 24.04 runner 通过 AppArmor 限制非特权 user namespace | workflow 中执行 `sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` |
 | GitHub Actions 运行器磁盘不足 | 免费 runner 只有约 14 GB 可用空间 | workflow 先删除 Android、.NET、GHC、CodeQL 等预装目录释放空间 |
+| 改内核配置后外部模块 `do_package` 失败 | WSL 下 pseudo 数据库记录的 inode 与重建文件不一致 | `bitbake -c cleansstate sixlinux-rtc-driver` 后重建（dev 和 release 构建目录各做一次） |
+| 板级测试误判 net namespace 未隔离 | 新 netns 中内核仍会创建 `sit0` | 检查改为"主机物理网卡没有泄漏"，而不是要求接口数等于 1 |
+| seccomp 测试取不到 EPERM | glibc `getppid()` 返回 -1 时不设置 errno | 测试改用 `syscall(SYS_getppid)` 判断拦截结果 |
 
 这些记录用于后续复现和面试讲解，不把环境问题或工具配置问题描述成真实硬件驱动问题。
